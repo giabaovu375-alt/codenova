@@ -47,8 +47,14 @@ function AdminGate() {
 function Admin() {
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [editing, setEditing] = useState<Lesson | null>(null);
-  const refresh = () => setLessons(lessonsStore.list());
-  useEffect(() => { refresh(); }, []);
+  const refresh = async () => {
+  const data = await lessonsStore.list();
+  setLessons(data);
+};
+
+useEffect(() => {
+  refresh();
+}, []);
 
   function newLesson() {
     setEditing({
@@ -98,7 +104,12 @@ function Admin() {
                     <td className="px-4 py-3 text-right">
                       <button onClick={() => setEditing(l)} className="mr-2 text-primary hover:underline">Sửa</button>
                       <button
-                        onClick={() => { if (confirm("Xoá bài này?")) { lessonsStore.remove(l.slug); refresh(); } }}
+                   onClick={async () => {
+  if (confirm("Xoá bài này?")) {
+    await lessonsStore.remove(l.slug);
+    await refresh();
+  }
+}}
                         className="text-destructive hover:underline"
                       >
                         Xoá
@@ -116,14 +127,18 @@ function Admin() {
         <Editor
           initial={editing}
           onCancel={() => setEditing(null)}
-          onSave={l => { lessonsStore.upsert(l); setEditing(null); refresh(); }}
+          onSave={async l => {
+  await lessonsStore.upsert(l);
+  setEditing(null);
+  await refresh();
+}}
         />
       )}
     </CodeNovaLayout>
   );
 }
 
-function Editor({ initial, onSave, onCancel }: { initial: Lesson; onSave: (l: Lesson) => void; onCancel: () => void }) {
+function Editor({ initial, onSave, onCancel }: { initial: Lesson; onSave: (l: Lesson) => Promise<void>; onCancel: () => void }) {
   const [title, setTitle] = useState(initial.title);
   const [level, setLevel] = useState<Lesson["level"]>(initial.level);
   const [language, setLanguage] = useState<LessonLanguage>(initial.language ?? "python");
@@ -196,9 +211,9 @@ function Editor({ initial, onSave, onCancel }: { initial: Lesson; onSave: (l: Le
     reader.readAsDataURL(file);
   }
 
-  function save() {
+  async function save() {
     if (!title.trim()) return alert("Nhập tiêu đề bài.");
-    onSave({
+    await onSave({
       slug,
       title: title.trim(),
       level,
