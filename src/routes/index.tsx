@@ -37,7 +37,7 @@ function Index() {
       // fake loading nhẹ cho mượt UI
       setTimeout(() => {
         setLoading(false);
-      }, 1200);
+      }, 300);
     };
 
     refresh();
