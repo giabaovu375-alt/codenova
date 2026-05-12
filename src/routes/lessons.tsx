@@ -1,114 +1,233 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { ArrowRight, Sparkles, BookOpen, Wrench } from "lucide-react";
 import { CodeNovaLayout } from "@/components/CodeNovaLayout";
-import { lessonsStore, type Lesson, type LessonLanguage } from "@/lib/lessons-store";
+import { lessonsStore, type Lesson } from "@/lib/lessons-store";
 
-export const Route = createFileRoute("/lessons")({
+export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Tất cả bài học — Code Nova" },
-      { name: "description", content: "Danh sách bài học từ cơ bản đến nâng cao." },
+      { title: "Code Nova — Học lập trình từ con số 0" },
+      {
+        name: "description",
+        content:
+          "Nền tảng học lập trình miễn phí với AI hỗ trợ giải thích code và chữa lỗi tự động.",
+      },
     ],
   }),
-  component: Lessons,
+  component: Index,
 });
 
-const LANGUAGES: { value: LessonLanguage | "all"; label: string }[] = [
-  { value: "all", label: "Tất cả" },
-  { value: "python", label: "Python" },
-  { value: "html", label: "HTML" },
-  { value: "css", label: "CSS" },
-  { value: "javascript", label: "JavaScript" },
-  { value: "java", label: "Java" },
-  { value: "cpp", label: "C++" },
-];
-
-const LEVELS = ["Tất cả", "Cơ bản", "Trung cấp", "Nâng cao"];
-
-function Lessons() {
+function Index() {
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [loading, setLoading] = useState(true);
-  const [level, setLevel] = useState<string>("Tất cả");
-  const [lang, setLang] = useState<LessonLanguage | "all">("all");
 
   useEffect(() => {
-    lessonsStore.listAsync().then((data) => {
+    const refresh = async () => {
+      setLoading(true);
+
+      const data = await lessonsStore.listAsync();
+
       setLessons(data);
       setLoading(false);
-    });
-    const onChanged = () => {
-      lessonsStore.listAsync().then(setLessons);
     };
-    window.addEventListener("codenova:lessons:changed", onChanged);
-    return () => window.removeEventListener("codenova:lessons:changed", onChanged);
+
+    refresh();
+
+    window.addEventListener("codenova:lessons:changed", refresh);
+
+    return () => {
+      window.removeEventListener("codenova:lessons:changed", refresh);
+    };
   }, []);
-
-  const filtered = lessons.filter((l) => {
-    const levelOk = level === "Tất cả" || l.level === level;
-    const langOk = lang === "all" || l.language === lang;
-    return levelOk && langOk;
-  });
-
-  const btnClass = (active: boolean) =>
-    "rounded-full border px-3 py-1 text-sm transition-colors " +
-    (active ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card hover:bg-secondary");
 
   return (
     <CodeNovaLayout>
-      <div className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight">Bài học</h1>
-        <p className="mt-2 text-muted-foreground">Chọn một chủ đề để bắt đầu.</p>
-      </div>
+      {/* Background Glow */}
+      <div className="pointer-events-none absolute left-1/2 top-0 -z-10 h-[450px] w-[450px] -translate-x-1/2 rounded-full bg-primary/10 blur-3xl" />
 
-      <div className="mb-3 flex flex-wrap gap-2">
-        {LANGUAGES.map((l) => (
-          <button key={l.value} onClick={() => setLang(l.value)} className={btnClass(lang === l.value)}>
-            {l.label}
-          </button>
-        ))}
-      </div>
+      {/* Hero */}
+      <section className="relative -mx-4 overflow-hidden px-4 pb-20 pt-12">
+        <div className="absolute inset-0 -z-10 nova-grid-bg opacity-40" />
 
-      <div className="mb-6 flex flex-wrap gap-2">
-        {LEVELS.map((l) => (
-          <button key={l} onClick={() => setLevel(l)} className={btnClass(level === l)}>
-            {l}
-          </button>
-        ))}
-      </div>
+        <div className="mx-auto max-w-4xl text-center">
+          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-card/80 px-4 py-1.5 text-xs backdrop-blur">
+            <span className="inline-block h-2 w-2 rounded-full bg-primary animate-pulse" />
+            Nền tảng học lập trình miễn phí
+          </div>
 
-      {loading ? (
-        <p className="text-muted-foreground">Đang tải bài học...</p>
-      ) : filtered.length === 0 ? (
-        <p className="text-muted-foreground">Chưa có bài học nào.</p>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((l) => (
+          <h1 className="text-4xl font-black tracking-tight sm:text-6xl">
+            Học lập trình từ{" "}
+            <span className="text-primary">con số 0</span>
+          </h1>
+
+          <p className="mx-auto mt-6 max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">
+            CodeNova giúp bạn học lập trình dễ dàng hơn với bài học trực quan,
+            ví dụ thực tế và AI hỗ trợ chữa lỗi code miễn phí 24/7.
+          </p>
+
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <Link
-              key={l.slug}
-              to="/lesson/$slug"
-              params={{ slug: l.slug }}
-              className="group flex flex-col overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-primary"
+              to="/lessons"
+              className="
+                inline-flex items-center gap-2 rounded-xl
+                bg-primary px-5 py-3 text-sm font-medium
+                text-primary-foreground transition-all
+                hover:-translate-y-1
+                hover:shadow-xl hover:shadow-primary/20
+              "
             >
-              {l.image && <img src={l.image} alt={l.title} className="aspect-[16/9] w-full object-cover" />}
-              <div className="flex flex-1 flex-col p-5">
-                <div className="mb-2 flex gap-2">
-                  <span className="w-fit rounded bg-secondary px-2 py-0.5 text-xs">{l.level}</span>
-                  {l.language && (
-                    <span className="w-fit rounded bg-primary/10 px-2 py-0.5 text-xs text-primary">
-                      {LANGUAGES.find((lg) => lg.value === l.language)?.label ?? l.language}
-                    </span>
-                  )}
-                </div>
-                <h3 className="font-medium group-hover:text-primary">{l.title}</h3>
-                <p className="mt-1 line-clamp-2 flex-1 text-sm text-muted-foreground">{l.description}</p>
-                <span className="mt-3 text-xs text-muted-foreground">
-                  {l.blocks.length} đoạn · {l.exercises.length} bài tập
-                </span>
-              </div>
+              Bắt đầu học
+              <ArrowRight className="h-4 w-4" />
             </Link>
+
+            <Link
+              to="/playground"
+              className="
+                inline-flex items-center gap-2 rounded-xl
+                border border-border bg-card/80
+                px-5 py-3 text-sm font-medium
+                backdrop-blur transition-all
+                hover:bg-secondary
+              "
+            >
+              <Sparkles className="h-4 w-4" />
+              Thử AI sửa code
+            </Link>
+          </div>
+        </div>
+
+        {/* Feature Cards */}
+        <div className="mx-auto mt-16 grid max-w-5xl gap-5 sm:grid-cols-3">
+          {[
+            {
+              icon: BookOpen,
+              title: "Bài học trực quan",
+              desc: "Lý thuyết ngắn gọn, dễ hiểu kèm ví dụ thực tế.",
+            },
+            {
+              icon: Sparkles,
+              title: "AI hỗ trợ",
+              desc: "Giải thích code và chữa lỗi tự động bằng AI.",
+            },
+            {
+              icon: Wrench,
+              title: "Thực hành liên tục",
+              desc: "Bài tập ứng dụng sau mỗi bài học giúp nhớ lâu hơn.",
+            },
+          ].map(({ icon: Icon, title, desc }) => (
+            <div
+              key={title}
+              className="
+                rounded-2xl border border-border
+                bg-card/80 p-6 backdrop-blur
+                transition-all duration-300
+                hover:-translate-y-1
+                hover:border-primary
+                hover:shadow-xl hover:shadow-primary/10
+              "
+            >
+              <Icon className="mb-4 h-6 w-6 text-primary" />
+
+              <h3 className="font-semibold">{title}</h3>
+
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                {desc}
+              </p>
+            </div>
           ))}
         </div>
-      )}
+      </section>
+
+      {/* Lesson Section */}
+      <section className="mt-6">
+        <div className="mb-7 flex items-end justify-between">
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight">
+              Bài học mới nhất
+            </h2>
+
+            <p className="mt-1 text-sm text-muted-foreground">
+              {loading
+                ? "Đang tải bài học..."
+                : `${lessons.length} bài hiện có`}
+            </p>
+          </div>
+
+          <Link
+            to="/lessons"
+            className="text-sm text-muted-foreground transition hover:text-foreground"
+          >
+            Xem tất cả →
+          </Link>
+        </div>
+
+        {loading ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {[1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="
+                  h-72 animate-pulse rounded-2xl
+                  border border-border bg-card
+                "
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {lessons.slice(0, 6).map((l) => (
+              <Link
+                key={l.slug}
+                to="/lesson/$slug"
+                params={{ slug: l.slug }}
+                className="
+                  group flex flex-col overflow-hidden
+                  rounded-2xl border border-border
+                  bg-card/80 backdrop-blur
+                  transition-all duration-300
+                  hover:-translate-y-1
+                  hover:border-primary
+                  hover:shadow-xl hover:shadow-primary/10
+                "
+              >
+                {l.image && (
+                  <div className="overflow-hidden">
+                    <img
+                      src={l.image}
+                      alt={l.title}
+                      className="
+                        aspect-[16/9] w-full object-cover
+                        transition-transform duration-500
+                        group-hover:scale-105
+                      "
+                    />
+                  </div>
+                )}
+
+                <div className="flex flex-1 flex-col p-5">
+                  <span className="mb-3 w-fit rounded-full bg-secondary px-3 py-1 text-xs text-secondary-foreground">
+                    {l.level}
+                  </span>
+
+                  <h3 className="font-semibold transition-colors group-hover:text-primary">
+                    {l.title}
+                  </h3>
+
+                  <p className="mt-2 line-clamp-2 flex-1 text-sm leading-6 text-muted-foreground">
+                    {l.description}
+                  </p>
+
+                  <span className="mt-4 text-xs text-muted-foreground">
+                    {l.blocks.length} đoạn code ·{" "}
+                    {l.exercises.length} bài tập
+                  </span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </section>
     </CodeNovaLayout>
   );
 }
