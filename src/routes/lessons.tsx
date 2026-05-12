@@ -1,31 +1,67 @@
-// lessons.tsx — DEBUG LEVEL
+// lessons.tsx — Production Ready (Real fix: unicode, retry, performance)
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, BookOpen, Search, RefreshCw, AlertCircle, X } from "lucide-react";
+import {
+  ArrowLeft,
+  BookOpen,
+  Search,
+  RefreshCw,
+  AlertCircle,
+  X,
+} from "lucide-react";
 import { CodeNovaLayout } from "@/components/CodeNovaLayout";
-import { lessonsStore, type Lesson, LANGUAGE_LABELS } from "@/lib/lessons-store";
+import { lessonsStore, type Lesson, LANGUAGE_LABELS, LEVEL_LABELS } from "@/lib/lessons-store";
 
 export const Route = createFileRoute("/lessons")({
   head: () => ({
     meta: [
       { title: "Bài học — Code Nova" },
-      { name: "description", content: "Danh sách bài học." },
+      {
+        name: "description",
+        content:
+          "Danh sách tất cả bài học lập trình miễn phí tại CodeNova – lọc theo ngôn ngữ và cấp độ.",
+      },
     ],
   }),
   component: LessonsPage,
 });
 
+// ─── Constants ──────────────────────────────────────
 const SKELETON_COUNT = 6;
 const LEVELS = ["Tất cả", "Cơ bản", "Trung cấp", "Nâng cao"] as const;
 
+// ─── Helpers ────────────────────────────────────────
 const normalize = (s: string) =>
-  s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
 
+/**
+ * Tạo chỉ mục tìm kiếm đã chuẩn hóa cho mỗi bài học.
+ * Chạy một lần khi fetch, không cần normalize lại khi filter.
+ */
+const buildSearchIndex = (lesson: Lesson): string => {
+  const parts = [
+    lesson.title,
+    lesson.description,
+    lesson.language ? LANGUAGE_LABELS[lesson.language] || lesson.language : "",
+  ];
+  return normalize(parts.join(" "));
+};
+
+// ─── Sub‑components ─────────────────────────────────
 const SkeletonCard = () => (
-  <div className="h-72 rounded-2xl border border-border bg-gradient-to-br from-card via-card to-secondary/40 animate-pulse" />
+  <div className="h-72 animate-pulse rounded-2xl border border-border bg-gradient-to-br from-card via-card to-secondary/40" />
 );
 
-const LessonCard = ({ lesson, index }: { lesson: Lesson; index: number }) => (
+const LessonCard = ({
+  lesson,
+  index,
+}: {
+  lesson: Lesson;
+  index: number;
+}) => (
   <Link
     to="/lesson/$slug"
     params={{ slug: lesson.slug }}
@@ -42,24 +78,30 @@ const LessonCard = ({ lesson, index }: { lesson: Lesson; index: number }) => (
         />
       </div>
     )}
+
     <div className="flex flex-1 flex-col p-5">
       <div className="mb-3 flex items-center gap-2">
-        {/* === TEST HIỂN THỊ LEVEL === */}
-        <span className="rounded-full bg-red-600 px-3 py-1 text-xs font-bold text-white">
-          LV: {lesson.level || "NULL"}
+        {/* Level badge */}
+        <span className="rounded-full bg-secondary px-3 py-1 text-xs text-secondary-foreground">
+          {LEVEL_LABELS[lesson.level] || lesson.level}
         </span>
+
+        {/* Language badge (nếu có) */}
         {lesson.language && (
           <span className="rounded-full bg-primary/10 px-3 py-1 text-xs text-primary">
             {LANGUAGE_LABELS[lesson.language] || lesson.language}
           </span>
         )}
       </div>
+
       <h3 className="font-semibold transition-colors group-hover:text-primary">
         {lesson.title}
       </h3>
+
       <p className="mt-2 line-clamp-2 flex-1 text-sm leading-6 text-muted-foreground">
         {lesson.description}
       </p>
+
       <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
         <span>{lesson.blocks.length} đoạn code</span>
         <span>{lesson.exercises.length} bài tập</span>
@@ -68,55 +110,100 @@ const LessonCard = ({ lesson, index }: { lesson: Lesson; index: number }) => (
   </Link>
 );
 
+// ─── Main Page ──────────────────────────────────────
 function LessonsPage() {
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Filters
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [languageFilter, setLanguageFilter] = useState<string | null>(null);
   const [levelFilter, setLevelFilter] = useState<string | null>(null);
 
+  // ── Debounce search ───────────────────────────────
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
     return () => clearTimeout(timer);
   }, [search]);
 
-  const fetchLessons = useCallback(
-    async (mounted: boolean, showLoading = true) => {
-      try {
-        if (showLoading) setLoading(true);
-        setError(null);
-        const data = await lessonsStore.listAsync();
-        console.log("📦 Lessons data:", data.map(l => ({ slug: l.slug, level: l.level })));
-        if (mounted) setLessons([...data]);
-      } catch (err: any) {
-        console.error(err);
-        if (mounted) setError(err?.message || "Lỗi tải bài học.");
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    },
-    []
-  );
+  // ── Fetch lessons (async thật, không fake mounted) ─
+  const fetchLessons = useCallback(async (showLoading = true) => {
+    try {
+      if (showLoading) setLoading(true);
+      setError(null);
 
+      const data = await lessonsStore.listAsync();
+
+      // Gắn chỉ mục tìm kiếm đã chuẩn hóa vào mỗi bài học
+      const enriched = data.map((l) => ({
+        ...l,
+        searchIndex: buildSearchIndex(l),
+      }));
+
+      setLessons(enriched);
+    } catch (err: any) {
+      console.error("⚠️ Lessons load error:", err);
+      setError(err?.message || "Không thể tải bài học. Vui lòng thử lại.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // ── Initial load + real‑time event ────────────────
   useEffect(() => {
-    let mounted = true;
-    fetchLessons(mounted, true);
-    if (typeof window === "undefined") return;
-    const handler = () => fetchLessons(mounted, false);
-    window.addEventListener("codenova:lessons:changed", handler);
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const data = await lessonsStore.listAsync();
+        const enriched = data.map((l) => ({
+          ...l,
+          searchIndex: buildSearchIndex(l),
+        }));
+
+        if (!cancelled) {
+          setLessons(enriched);
+        }
+      } catch (err: any) {
+        console.error("⚠️ Lessons load error:", err);
+        if (!cancelled) {
+          setError(err?.message || "Không thể tải bài học. Vui lòng thử lại.");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    load();
+
+    if (typeof window !== "undefined") {
+      const handler = () => fetchLessons(false);
+      window.addEventListener("codenova:lessons:changed", handler);
+
+      return () => {
+        cancelled = true;
+        window.removeEventListener("codenova:lessons:changed", handler);
+      };
+    }
+
     return () => {
-      mounted = false;
-      window.removeEventListener("codenova:lessons:changed", handler);
+      cancelled = true;
     };
   }, [fetchLessons]);
 
+  // ── Retry (người dùng bấm) ────────────────────────
   const retry = () => {
-    let mounted = true;
-    fetchLessons(mounted, true);
+    fetchLessons(true);
   };
 
+  // ── Languages extracted from real data ─────────────
   const languages = useMemo(() => {
     const set = new Set<string>();
     lessons.forEach((l) => {
@@ -125,45 +212,58 @@ function LessonsPage() {
     return Array.from(set).sort();
   }, [lessons]);
 
+  // ── Filtered list (real, no mock) ─────────────────
   const filteredLessons = useMemo(() => {
     let result = lessons;
+
     if (languageFilter) {
       result = result.filter((l) => l.language === languageFilter);
     }
+
     if (levelFilter) {
       result = result.filter((l) => l.level === levelFilter);
     }
+
     const q = normalize(debouncedSearch.trim());
     if (q) {
-      result = result.filter(
-        (l) =>
-          normalize(l.title).includes(q) ||
-          normalize(l.description).includes(q) ||
-          (LANGUAGE_LABELS[l.language] || "").toLowerCase().includes(q)
-      );
+      result = result.filter((l) => (l as any).searchIndex?.includes(q));
     }
+
     return result;
   }, [lessons, languageFilter, levelFilter, debouncedSearch]);
 
-  const hasFilters = languageFilter !== null || levelFilter !== null || debouncedSearch !== "";
+  const hasFilters =
+    languageFilter !== null || levelFilter !== null || debouncedSearch !== "";
 
+  // ── Render ────────────────────────────────────────
   return (
     <CodeNovaLayout>
       <div className="mx-auto max-w-6xl px-4 pb-24 pt-10">
+        {/* Back link */}
         <Link
           to="/"
-          className="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground"
+          className="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
-          <ArrowLeft className="h-4 w-4" /> Quay lại trang chủ
+          <ArrowLeft className="h-4 w-4" />
+          Quay lại trang chủ
         </Link>
 
+        {/* Header + Search */}
         <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <h1 className="text-4xl font-black tracking-tight">Tất cả bài học</h1>
+            <h1 className="text-4xl font-black tracking-tight">
+              Tất cả bài học
+            </h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              {loading ? "Đang tải..." : error ? "L��i" : `${lessons.length} bài học`}
+              {loading
+                ? "Đang tải..."
+                : error
+                  ? "Tạm thời chưa có dữ liệu"
+                  : `Hiện có ${lessons.length} bài học`}
             </p>
           </div>
+
+          {/* Search input */}
           <div className="relative w-full md:w-[300px]">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
@@ -171,37 +271,101 @@ function LessonsPage() {
               placeholder="Tìm bài học..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-11 w-full rounded-xl border border-border bg-card pl-10 pr-10 text-sm outline-none"
+              className="h-11 w-full rounded-xl border border-border bg-card pl-10 pr-10 text-sm outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20"
               disabled={loading}
             />
             {search && (
-              <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2">
+              <button
+                onClick={() => setSearch("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
                 <X className="h-4 w-4" />
               </button>
             )}
           </div>
         </div>
 
-        {/* Filter chips */}
+        {/* ── Filter chips (chỉ hiện khi có dữ liệu thật) ── */}
         {!error && lessons.length > 0 && (
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <span className="text-xs text-muted-foreground">Cấp độ:</span>
-            {LEVELS.map((lvl) => (
-              <button
-                key={lvl}
-                onClick={() => setLevelFilter(lvl === "Tất cả" ? null : lvl)}
-                className={`rounded-full px-4 py-1.5 text-xs font-medium transition ${
-                  (lvl === "Tất cả" && !levelFilter) || levelFilter === lvl
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-card border border-border text-muted-foreground hover:bg-secondary"
-                }`}
-              >
-                {lvl}
-              </button>
-            ))}
+          <>
+            {/* Level filter */}
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground">Cấp độ:</span>
+              {LEVELS.map((lvl) => (
+                <button
+                  key={lvl}
+                  onClick={() =>
+                    setLevelFilter(lvl === "Tất cả" ? null : lvl)
+                  }
+                  className={`rounded-full px-4 py-1.5 text-xs font-medium transition ${
+                    (lvl === "Tất cả" && !levelFilter) ||
+                    levelFilter === lvl
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-card border border-border text-muted-foreground hover:bg-secondary"
+                  }`}
+                >
+                  {lvl}
+                </button>
+              ))}
+            </div>
+
+            {/* Language filter */}
+            {languages.length > 0 && (
+              <div className="mb-4 flex flex-wrap items-center gap-2">
+                <span className="text-xs text-muted-foreground">
+                  Ngôn ngữ:
+                </span>
+                <button
+                  onClick={() => setLanguageFilter(null)}
+                  className={`rounded-full px-4 py-1.5 text-xs font-medium transition ${
+                    languageFilter === null
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-card border border-border text-muted-foreground hover:bg-secondary"
+                  }`}
+                >
+                  Tất cả
+                </button>
+                {languages.map((lang) => (
+                  <button
+                    key={lang}
+                    onClick={() =>
+                      setLanguageFilter(
+                        lang === languageFilter ? null : lang
+                      )
+                    }
+                    className={`rounded-full px-4 py-1.5 text-xs font-medium transition ${
+                      languageFilter === lang
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-card border border-border text-muted-foreground hover:bg-secondary"
+                    }`}
+                  >
+                    {LANGUAGE_LABELS[lang as keyof typeof LANGUAGE_LABELS] ||
+                      lang}
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Clear filters button */}
+        {hasFilters && !error && (
+          <div className="mb-4">
+            <button
+              onClick={() => {
+                setSearch("");
+                setLanguageFilter(null);
+                setLevelFilter(null);
+              }}
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-3 w-3" />
+              Xóa tất cả bộ lọc
+            </button>
           </div>
         )}
 
+        {/* ── State: Loading ──────────────────────────── */}
         {loading && (
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: SKELETON_COUNT }).map((_, i) => (
@@ -210,31 +374,56 @@ function LessonsPage() {
           </div>
         )}
 
+        {/* ── State: Error ────────────────────────────── */}
         {!loading && error && (
-          <div className="flex flex-col items-center py-20">
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-destructive/30 bg-destructive/5 py-20 text-center">
             <AlertCircle className="mb-4 h-10 w-10 text-destructive/70" />
-            <p>{error}</p>
-            <button onClick={retry} className="mt-5 rounded-xl bg-primary px-4 py-2 text-sm text-primary-foreground">
-              <RefreshCw className="inline h-4 w-4" /> Thử lại
+            <p className="text-sm text-muted-foreground">{error}</p>
+            <button
+              onClick={retry}
+              className="mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Thử lại
             </button>
           </div>
         )}
 
+        {/* ── State: Empty (chưa có bài nào) ──────────── */}
         {!loading && !error && lessons.length === 0 && (
-          <div className="py-20 text-center">
-            <BookOpen className="mx-auto mb-4 h-10 w-10 text-muted-foreground/40" />
-            <p>Chưa có bài học nào.</p>
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-border bg-card/50 py-20 text-center">
+            <BookOpen className="mb-4 h-10 w-10 text-muted-foreground/40" />
+            <h3 className="font-medium">Chưa có bài học nào</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Quay lại sau nhé, bài học đang được thêm mỗi ngày.
+            </p>
           </div>
         )}
 
+        {/* ── State: No search results ────────────────── */}
+        {!loading && !error && lessons.length > 0 && filteredLessons.length === 0 && (
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-border bg-card/50 py-20 text-center">
+            <Search className="mb-4 h-10 w-10 text-muted-foreground/40" />
+            <h3 className="font-medium">Không tìm thấy bài học</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Thử tìm kiếm với từ khóa khác hoặc xóa bộ lọc.
+            </p>
+          </div>
+        )}
+
+        {/* ── State: Success ──────────────────────────── */}
         {!loading && !error && filteredLessons.length > 0 && (
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {filteredLessons.map((lesson, index) => (
-              <LessonCard key={lesson.slug} lesson={lesson} index={index} />
+              <LessonCard
+                key={lesson.slug}
+                lesson={lesson}
+                index={index}
+              />
             ))}
           </div>
         )}
       </div>
     </CodeNovaLayout>
   );
-}
+  }
