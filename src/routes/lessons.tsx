@@ -22,24 +22,38 @@ function Index() {
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const refresh = async () => {
+useEffect(() => {
+  let mounted = true;
+
+  const refresh = async () => {
+    try {
       setLoading(true);
 
       const data = await lessonsStore.listAsync();
 
-      setLessons(data);
-      setLoading(false);
-    };
+      if (mounted) {
+        setLessons([...data]);
+      }
+    } finally {
+      if (mounted) {
+        setLoading(false);
+      }
+    }
+  };
 
+  refresh();
+
+  const handler = () => {
     refresh();
+  };
 
-    window.addEventListener("codenova:lessons:changed", refresh);
+  window.addEventListener("codenova:lessons:changed", handler);
 
-    return () => {
-      window.removeEventListener("codenova:lessons:changed", refresh);
-    };
-  }, []);
+  return () => {
+    mounted = false;
+    window.removeEventListener("codenova:lessons:changed", handler);
+  };
+}, []);
 
   return (
     <CodeNovaLayout>
@@ -155,11 +169,21 @@ function Index() {
           </div>
 
           <Link
-            to="/lessons"
-            className="text-sm text-muted-foreground transition hover:text-foreground"
-          >
-            Xem tất cả →
-          </Link>
+  to="/lessons"
+  className="
+    inline-flex items-center gap-1
+    rounded-lg border border-border
+    px-3 py-2 text-sm
+    text-muted-foreground
+    transition-all
+    hover:border-primary
+    hover:text-primary
+    hover:bg-primary/5
+  "
+>
+  Xem tất cả
+  <ArrowRight className="h-4 w-4" />
+</Link>
         </div>
 
         {loading ? (
@@ -168,15 +192,16 @@ function Index() {
               <div
                 key={i}
                 className="
-                  h-72 animate-pulse rounded-2xl
-                  border border-border bg-card
-                "
+  h-72 rounded-2xl border border-border
+  bg-gradient-to-br from-card via-card to-secondary/40
+  animate-pulse
+"
               />
             ))}
           </div>
         ) : (
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {lessons.slice(0, 6).map((l) => (
+            {[...lessons].slice(0, 6).map((l) => (
               <Link
                 key={l.slug}
                 to="/lesson/$slug"
@@ -230,4 +255,4 @@ function Index() {
       </section>
     </CodeNovaLayout>
   );
-}
+                }
