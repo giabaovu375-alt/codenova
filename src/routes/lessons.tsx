@@ -5,7 +5,7 @@ import {
   ArrowLeft, BookOpen, Search, RefreshCw, AlertCircle, X,
 } from "lucide-react";
 import { CodeNovaLayout } from "@/components/CodeNovaLayout";
-import { lessonsStore, type Lesson, LANGUAGE_LABELS } from "@/lib/lessons-store";
+import { lessonsStore, type Lesson, LANGUAGE_LABELS, LEVEL_LABELS } from "@/lib/lessons-store";
 
 export const Route = createFileRoute("/lessons")({
   head: () => ({
@@ -47,7 +47,7 @@ const LessonCard = ({ lesson, index }: { lesson: Lesson; index: number }) => (
     <div className="flex flex-1 flex-col p-5">
       <div className="mb-3 flex items-center gap-2">
         <span className="rounded-full bg-secondary px-3 py-1 text-xs text-secondary-foreground">
-          {lesson.level}
+          {LEVEL_LABELS[lesson.level] || lesson.level || "Cơ bản"}
         </span>
         {lesson.language && (
           <span className="rounded-full bg-primary/10 px-3 py-1 text-xs text-primary">
