@@ -1,14 +1,26 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ArrowRight, Sparkles, BookOpen, Wrench } from "lucide-react";
+import {
+  ArrowRight,
+  Sparkles,
+  BookOpen,
+  Wrench,
+} from "lucide-react";
+
 import { CodeNovaLayout } from "@/components/CodeNovaLayout";
 import { lessonsStore, type Lesson } from "@/lib/lessons-store";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Code Nova — Học Python từ cơ bản đến nâng cao" },
-      { name: "description", content: "Thư viện tài liệu Python tối giản, có AI hỗ trợ chữa code và sinh bài tập tự động." },
+      {
+        title: "Code Nova — Học lập trình từ con số 0",
+      },
+      {
+        name: "description",
+        content:
+          "Nền tảng học lập trình miễn phí với AI hỗ trợ giải thích code, chữa lỗi và tạo bài tập tự động.",
+      },
     ],
   }),
   component: Index,
@@ -16,93 +28,190 @@ export const Route = createFileRoute("/")({
 
 function Index() {
   const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
-    const refresh = () => setLessons(lessonsStore.list());
+    const refresh = () => {
+      setLessons(lessonsStore.list());
+
+      // fake loading nhẹ cho mượt UI
+      setTimeout(() => {
+        setLoading(false);
+      }, 1200);
+    };
+
     refresh();
+
     window.addEventListener("codenova:lessons:changed", refresh);
-    return () => window.removeEventListener("codenova:lessons:changed", refresh);
+
+    return () => {
+      window.removeEventListener("codenova:lessons:changed", refresh);
+    };
   }, []);
+
+  // Loading Screen
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-5">
+          <div className="relative">
+            <div className="h-20 w-20 rounded-full border-4 border-primary/20"></div>
+
+            <div className="absolute inset-0 h-20 w-20 animate-spin rounded-full border-4 border-transparent border-t-primary"></div>
+          </div>
+
+          <div className="text-center">
+            <h1 className="text-3xl font-bold tracking-tight text-primary">
+              Code Nova
+            </h1>
+
+            <p className="mt-2 text-sm text-muted-foreground">
+              Đang tải nền tảng học lập trình...
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <CodeNovaLayout>
       {/* Hero */}
-      <section className="relative -mx-4 px-4 pb-20 pt-10">
-        <div className="absolute inset-0 -z-10 nova-grid-bg opacity-50" />
-        <div className="mx-auto max-w-3xl text-center">
-          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary" />
-            Phiên bản tài liệu Python
+      <section className="relative -mx-4 overflow-hidden px-4 pb-24 pt-14">
+        <div className="absolute inset-0 -z-10 nova-grid-bg opacity-40" />
+
+        <div className="absolute left-1/2 top-0 -z-10 h-[500px] w-[500px] -translate-x-1/2 rounded-full bg-primary/10 blur-3xl" />
+
+        <div className="mx-auto max-w-4xl text-center">
+          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-1.5 text-xs shadow-sm">
+            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-primary" />
+            Nền tảng học lập trình miễn phí
           </div>
-          <h1 className="text-4xl font-semibold tracking-tight sm:text-6xl">
-            Chào mừng bạn đến <span className="text-primary">Code Nova</span>
+
+          <h1 className="text-4xl font-black tracking-tight sm:text-6xl lg:text-7xl">
+            Học lập trình từ{" "}
+            <span className="bg-gradient-to-r from-primary to-blue-400 bg-clip-text text-transparent">
+              con số 0
+            </span>
           </h1>
-          <p className="mt-5 text-base text-muted-foreground sm:text-lg">
-            Tài liệu lập trình Python tối giản, mạch lạc — đi kèm AI giúp bạn{" "}
-            <span className="text-foreground">giải thích, chữa lỗi và sinh bài tập</span> ngay khi học.
+
+          <p className="mx-auto mt-6 max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">
+            Code Nova giúp bạn học lập trình dễ dàng hơn với hệ thống bài học
+            trực quan, ví dụ thực tế và AI hỗ trợ chữa lỗi code hoàn toàn miễn phí.
           </p>
-          <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
+
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
             <Link
               to="/lessons"
-              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-transform hover:-translate-y-0.5"
+              className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-medium text-primary-foreground shadow-lg transition-all hover:-translate-y-1 hover:shadow-primary/40"
             >
-              Bắt đầu học <ArrowRight className="h-4 w-4" />
+              Bắt đầu học
+              <ArrowRight className="h-4 w-4" />
             </Link>
+
             <Link
               to="/playground"
-              className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-4 py-2.5 text-sm font-medium hover:bg-secondary"
+              className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-5 py-3 text-sm font-medium transition-all hover:bg-secondary"
             >
-              <Sparkles className="h-4 w-4" /> Thử AI sửa code
+              <Sparkles className="h-4 w-4" />
+              AI sửa code
             </Link>
           </div>
         </div>
 
-        {/* Feature trio */}
-        <div className="mx-auto mt-16 grid max-w-4xl gap-4 sm:grid-cols-3">
+        {/* Features */}
+        <div className="mx-auto mt-20 grid max-w-5xl gap-5 sm:grid-cols-3">
           {[
-            { icon: BookOpen, t: "Tài liệu sạch", d: "Mỗi bài hơn 15 đoạn code ngắn, có giải thích & bài tập." },
-            { icon: Sparkles, t: "AI giải thích", d: "Click 1 nút để AI giải thích từng đoạn code." },
-            { icon: Wrench, t: "AI chữa code", d: "Dán code, AI tìm lỗi và sửa — qua nhiều API miễn phí." },
+            {
+              icon: BookOpen,
+              t: "Bài học trực quan",
+              d: "Lộ trình từ cơ bản đến nâng cao với ví dụ dễ hiểu.",
+            },
+            {
+              icon: Sparkles,
+              t: "AI hỗ trợ 24/7",
+              d: "Giải thích code, chữa lỗi và phân tích logic tự động.",
+            },
+            {
+              icon: Wrench,
+              t: "Thực hành thực tế",
+              d: "Bài tập ứng dụng giúp nhớ lâu và code tốt hơn.",
+            },
           ].map(({ icon: Icon, t, d }) => (
-            <div key={t} className="rounded-lg border border-border bg-card p-5">
-              <Icon className="mb-3 h-5 w-5 text-primary" />
-              <h3 className="font-medium">{t}</h3>
-              <p className="mt-1 text-sm text-muted-foreground">{d}</p>
+            <div
+              key={t}
+              className="group rounded-2xl border border-border bg-card/80 p-6 backdrop-blur transition-all hover:-translate-y-1 hover:border-primary"
+            >
+              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10">
+                <Icon className="h-5 w-5 text-primary" />
+              </div>
+
+              <h3 className="text-lg font-semibold">{t}</h3>
+
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                {d}
+              </p>
             </div>
           ))}
         </div>
       </section>
 
-      {/* Lesson grid */}
-      <section className="mt-4">
-        <div className="mb-6 flex items-end justify-between">
+      {/* Lessons */}
+      <section className="mt-2">
+        <div className="mb-8 flex items-end justify-between">
           <div>
-            <h2 className="text-2xl font-semibold tracking-tight">Bài học mới nhất</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{lessons.length} bài hiện có</p>
+            <h2 className="text-3xl font-bold tracking-tight">
+              Bài học mới nhất
+            </h2>
+
+            <p className="mt-2 text-sm text-muted-foreground">
+              Hiện có {lessons.length} bài học trên hệ thống
+            </p>
           </div>
-          <Link to="/lessons" className="text-sm text-muted-foreground hover:text-foreground">
+
+          <Link
+            to="/lessons"
+            className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+          >
             Xem tất cả →
           </Link>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {lessons.slice(0, 6).map(l => (
+
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {lessons.slice(0, 6).map((l) => (
             <Link
               key={l.slug}
               to="/lesson/$slug"
               params={{ slug: l.slug }}
-              className="group flex flex-col overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-primary"
+              className="group overflow-hidden rounded-2xl border border-border bg-card transition-all hover:-translate-y-1 hover:border-primary"
             >
               {l.image && (
-                <img src={l.image} alt={l.title} className="aspect-[16/9] w-full object-cover" />
+                <div className="overflow-hidden">
+                  <img
+                    src={l.image}
+                    alt={l.title}
+                    className="aspect-[16/9] w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  />
+                </div>
               )}
-              <div className="flex flex-1 flex-col p-5">
-                <span className="mb-2 w-fit rounded bg-secondary px-2 py-0.5 text-xs text-secondary-foreground">
+
+              <div className="p-5">
+                <span className="mb-3 inline-block rounded-full bg-secondary px-3 py-1 text-xs text-secondary-foreground">
                   {l.level}
                 </span>
-                <h3 className="font-medium group-hover:text-primary">{l.title}</h3>
-                <p className="mt-1 line-clamp-2 flex-1 text-sm text-muted-foreground">{l.description}</p>
-                <span className="mt-3 text-xs text-muted-foreground">
-                  {l.blocks.length} đoạn code · {l.exercises.length} bài tập
-                </span>
+
+                <h3 className="text-lg font-semibold transition-colors group-hover:text-primary">
+                  {l.title}
+                </h3>
+
+                <p className="mt-2 line-clamp-2 text-sm leading-6 text-muted-foreground">
+                  {l.description}
+                </p>
+
+                <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{l.blocks.length} đoạn code</span>
+                  <span>{l.exercises.length} bài tập</span>
+                </div>
               </div>
             </Link>
           ))}
