@@ -40,6 +40,12 @@ export const LANGUAGE_COLORS: Record<LessonLanguage, string> = {
   cpp: "bg-indigo-500/10 text-indigo-600 border-indigo-500/20 dark:text-indigo-400",
 };
 
+export const LEVEL_LABELS: Record<string, string> = {
+  "Cơ bản": "Cơ bản",
+  "Trung cấp": "Trung cấp",
+  "Nâng cao": "Nâng cao",
+};
+
 export type Lesson = {
   slug: string;
   title: string;
@@ -68,17 +74,17 @@ function notify() {
 
 // Map raw Supabase row -> Lesson (immutable)
 function mapRow(row: any): Lesson {
-  return Object.freeze({
+  return {
     slug: row.slug,
     title: row.title,
-    level: row.level as Lesson["level"],
+    level: row.level || "Cơ bản", // fallback nếu level bị NULL
     language: row.language as LessonLanguage | undefined,
     description: row.description ?? "",
     image: row.image ?? undefined,
     blocks: Array.isArray(row.blocks) ? row.blocks : [],
     exercises: Array.isArray(row.exercises) ? row.exercises : [],
     createdAt: new Date(row.created_at).getTime(),
-  });
+  };
 }
 
 // ─── Per-request cache (short-lived, no cross-user leak) ──
