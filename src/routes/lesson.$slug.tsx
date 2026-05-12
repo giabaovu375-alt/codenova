@@ -1,9 +1,12 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Sparkles, Loader2, CheckCircle2, Trophy, Wand2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ArrowLeft, Sparkles, Loader2, CheckCircle2, Trophy,
+  Wand2, BookOpen, AlertCircle, RefreshCw
+} from "lucide-react";
 import { CodeNovaLayout } from "@/components/CodeNovaLayout";
 import { CodeBlock } from "@/components/CodeBlock";
-import { lessonsStore, type Lesson, LANGUAGE_LABEL } from "@/lib/lessons-store";
+import { lessonsStore, type Lesson, LANGUAGE_LABELS } from "@/lib/lessons-store";
 import { explainCode, gradeSubmission, hasAnyKey } from "@/lib/ai";
 import { progressStore } from "@/lib/progress-store";
 import { useAuth } from "@/lib/auth";
@@ -12,155 +15,30 @@ export const Route = createFileRoute("/lesson/$slug")({
   component: LessonPage,
 });
 
-function LessonPage() {
-  const { slug } = Route.useParams();
-  const { user } = useAuth();
-  const [lesson, setLesson] = useState<Lesson | null>(null);
-  const [readSet, setReadSet] = useState<Set<string>>(new Set());
+// ─── Components ──────────────────────────────────────
 
-  useEffect(() => {
-    const l = lessonsStore.get(slug);
-    if (!l) throw notFound();
-    setLesson(l);
-  }, [slug]);
+const SkeletonBlock = () => (
+  <div className="mb-10 animate-pulse space-y-4">
+    <div className="flex items-center justify-between">
+      <div className="h-6 w-32 rounded bg-secondary" />
+      <div className="h-8 w-28 rounded bg-secondary" />
+    </div>
+    <div className="h-40 w-full rounded-lg bg-secondary" />
+    <div className="h-4 w-3/4 rounded bg-secondary" />
+  </div>
+);
 
-  // Load saved progress
-  useEffect(() => {
-    if (!user || !lesson) return;
-    progressStore.get(slug).then(p => {
-      if (!p) return;
-      // We can't know which specific blocks were read, but mark first N as read
-      const ids = lesson.blocks.slice(0, p.blocks_read).map(b => b.id);
-      setReadSet(new Set(ids));
-    });
-  }, [user, lesson, slug]);
-
-  // Persist progress when readSet changes
-  useEffect(() => {
-    if (!user || !lesson) return;
-    progressStore.setBlocksRead(slug, readSet.size, lesson.blocks.length);
-  }, [readSet, user, lesson, slug]);
-
-  function markRead(id: string) {
-    setReadSet(prev => {
-      if (prev.has(id)) return prev;
-      const next = new Set(prev);
-      next.add(id);
-      return next;
-    });
-  }
-
-  if (!lesson)
-    return (
-      <CodeNovaLayout>
-        <div className="py-20 text-center text-muted-foreground">Đang tải…</div>
-      </CodeNovaLayout>
-    );
-
-  const total = lesson.blocks.length;
-  const done = readSet.size;
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-  const language = lesson.language ?? "python";
-  const langLabel = LANGUAGE_LABEL[language];
-
-  return (
-    <CodeNovaLayout>
-      <Link to="/lessons" className="mb-6 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="h-4 w-4" /> Tất cả bài học
-      </Link>
-      <header className="mb-8 border-b border-border pb-8">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded bg-secondary px-2 py-0.5 text-xs">{lesson.level}</span>
-          <span className="rounded bg-primary/15 px-2 py-0.5 text-xs font-medium text-primary">{langLabel}</span>
-        </div>
-        <h1 className="mt-3 text-4xl font-semibold tracking-tight">{lesson.title}</h1>
-        <p className="mt-3 max-w-2xl text-muted-foreground">{lesson.description}</p>
-        {lesson.image && (
-          <img src={lesson.image} alt={lesson.title} className="mt-6 max-h-80 w-full rounded-lg border border-border object-cover" />
-        )}
-
-        {/* Progress bar */}
-        <div className="mt-6 rounded-md border border-border bg-card p-3">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">
-              Tiến độ tự đánh dấu: <span className="font-medium text-foreground">{done}/{total}</span> đoạn
-              {!user && <span className="ml-2 text-amber-600">(Đăng nhập để lưu)</span>}
-            </span>
-            <span className="font-medium">{pct}%</span>
-          </div>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-secondary">
-            <div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} />
-          </div>
-          <p className="mt-2 text-[11px] text-muted-foreground">
-            Tự đọc, tự đánh dấu — không bắt buộc. Quan trọng là bạn thật sự hiểu trước khi làm thử thách.
-          </p>
-        </div>
-      </header>
-
-      <div className="space-y-10">
-        {lesson.blocks.map((b, i) => (
-          <BlockCard
-            key={b.id}
-            index={i}
-            code={b.code}
-            explanation={b.explanation}
-            language={language}
-            read={readSet.has(b.id)}
-            onMarkRead={() => markRead(b.id)}
-          />
-        ))}
-      </div>
-
-      {/* Existing exercises section */}
-      {lesson.exercises.length > 0 && (
-        <section className="mt-16 rounded-lg border border-border bg-card p-6">
-          <h2 className="text-xl font-semibold">Bài tập gợi ý</h2>
-          <p className="mt-1 text-xs text-muted-foreground">Tham khảo, tự luyện ngoài giờ.</p>
-          <ol className="mt-4 space-y-3">
-            {lesson.exercises.map((e, i) => (
-              <li key={e.id} className="flex gap-3">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-medium text-primary-foreground">
-                  {i + 1}
-                </span>
-                <p className="pt-0.5 text-sm">{e.prompt}</p>
-              </li>
-            ))}
-          </ol>
-        </section>
-      )}
-
-      {/* Final challenge — always available, success depends on user effort */}
-      <FinalChallenge
-        lesson={lesson}
-        language={language}
-        langLabel={langLabel}
-        readPct={pct}
-        loggedIn={!!user}
-      />
-    </CodeNovaLayout>
-  );
-}
-
-function BlockCard({
-  index,
-  code,
-  explanation,
-  language,
-  read,
-  onMarkRead,
+const BlockCard = React.memo(({
+  index, code, explanation, language, read, onMarkRead
 }: {
-  index: number;
-  code: string;
-  explanation?: string;
-  language: string;
-  read: boolean;
-  onMarkRead: () => void;
-}) {
+  index: number; code: string; explanation?: string; language: string;
+  read: boolean; onMarkRead: () => void;
+}) => {
   const [aiText, setAiText] = useState("");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
-  async function ask() {
+  const ask = async () => {
     if (!hasAnyKey()) {
       setErr("Chưa có API key. Vào Cài đặt để thêm.");
       return;
@@ -174,20 +52,20 @@ function BlockCard({
     } finally {
       setLoading(false);
     }
-  }
+  };
 
   return (
-    <article>
-      <div className="mb-2 flex items-center justify-between">
+    <article className="mb-10 scroll-mt-20">
+      <div className="mb-3 flex items-center justify-between">
         <h3 className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
           Đoạn {index + 1}
-          {read && <CheckCircle2 className="h-3.5 w-3.5 text-primary" />}
+          {read && <CheckCircle2 className="h-4 w-4 text-primary" />}
         </h3>
         <div className="flex items-center gap-2">
           <button
             onClick={ask}
             disabled={loading}
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-xs hover:border-primary hover:text-primary disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs transition-all hover:border-primary hover:text-primary disabled:opacity-50"
           >
             {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
             AI giải thích
@@ -195,45 +73,39 @@ function BlockCard({
           <button
             onClick={onMarkRead}
             disabled={read}
-            className={
-              "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs " +
-              (read
-                ? "bg-secondary text-muted-foreground"
-                : "bg-primary text-primary-foreground hover:opacity-90")
-            }
+            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs transition-all ${
+              read
+                ? "bg-secondary text-muted-foreground cursor-not-allowed"
+                : "bg-primary text-primary-foreground hover:opacity-90"
+            }`}
           >
             {read ? "Đã đọc" : "Đánh dấu đã đọc"}
           </button>
         </div>
       </div>
+
       <CodeBlock code={code} language={language} />
+
       {explanation && (
-        <p className="mt-3 border-l-2 border-primary/60 pl-3 text-sm text-muted-foreground">{explanation}</p>
+        <p className="mt-3 border-l-2 border-primary/60 pl-3 text-sm text-muted-foreground">
+          {explanation}
+        </p>
       )}
       {err && <p className="mt-3 text-sm text-destructive">{err}</p>}
       {aiText && (
-        <div className="mt-3 rounded-md border border-primary/30 bg-primary/5 p-4 text-sm whitespace-pre-wrap">
+        <div className="mt-3 rounded-md border border-primary/30 bg-primary/5 p-4 text-sm whitespace-pre-wrap animate-in fade-in slide-in-from-top-2">
           {aiText}
         </div>
       )}
     </article>
   );
-}
+});
 
-function FinalChallenge({
-  lesson,
-  language,
-  langLabel,
-  readPct,
-  loggedIn,
+const FinalChallenge = ({
+  lesson, language, langLabel, readPct, loggedIn
 }: {
-  lesson: Lesson;
-  language: string;
-  langLabel: string;
-  readPct: number;
-  loggedIn: boolean;
-}) {
-  // Build a deterministic challenge prompt from the lesson topic
+  lesson: Lesson; language: string; langLabel: string; readPct: number; loggedIn: boolean;
+}) => {
   const prompt = useMemo(
     () =>
       `Thử thách cuối bài "${lesson.title}" (${langLabel}, ${lesson.level}): Hãy viết một đoạn ${langLabel} ngắn áp dụng kiến thức vừa học. ` +
@@ -248,19 +120,11 @@ function FinalChallenge({
   const [err, setErr] = useState("");
   const submittedRef = useRef(false);
 
-  async function submit() {
-    if (!loggedIn) {
-      setErr("Đăng nhập để nộp bài và cộng điểm.");
-      return;
-    }
-    if (!hasAnyKey()) {
-      setErr("Cần API key trong Cài đặt để AI chấm bài.");
-      return;
-    }
-    if (code.trim().length < 10) {
-      setErr("Code quá ngắn, hãy viết thêm.");
-      return;
-    }
+  const submit = async () => {
+    if (!loggedIn) { setErr("Đăng nhập để nộp bài và cộng điểm."); return; }
+    if (!hasAnyKey()) { setErr("Cần API key trong Cài đặt để AI chấm bài."); return; }
+    if (code.trim().length < 10) { setErr("Code quá ngắn, hãy viết thêm."); return; }
+
     setErr("");
     setBusy(true);
     try {
@@ -275,15 +139,16 @@ function FinalChallenge({
     } finally {
       setBusy(false);
     }
-  }
+  };
 
   return (
-    <section className="mt-10 rounded-lg border-2 border-primary/40 bg-card p-6">
+    <section className="mt-16 rounded-lg border-2 border-primary/40 bg-card p-6">
       <div className="flex flex-wrap items-center gap-2">
         <Trophy className="h-5 w-5 text-primary" />
         <h2 className="text-xl font-semibold">Thử thách cuối bài</h2>
         <span className="ml-auto text-xs text-muted-foreground">Tối đa 10 điểm · {langLabel}</span>
       </div>
+
       <p className="mt-3 text-sm text-muted-foreground">{prompt}</p>
       {readPct < 100 && (
         <p className="mt-2 text-xs text-amber-600">
@@ -295,15 +160,15 @@ function FinalChallenge({
         value={code}
         onChange={e => setCode(e.target.value)}
         spellCheck={false}
-        placeholder={`// Viết code ${langLabel} của bạn ở đây`}
-        className="mt-4 h-56 w-full rounded-md border border-border bg-[oklch(0.13_0_0)] p-4 font-mono text-sm text-[oklch(0.95_0_0)] focus:border-primary focus:outline-none"
+        placeholder={`// Viết code ${langLabel} của bạn ở đây...`}
+        className="mt-4 h-56 w-full rounded-md border border-border bg-[oklch(0.13_0_0)] p-4 font-mono text-sm text-[oklch(0.95_0_0)] focus:border-primary focus:outline-none transition-all"
       />
 
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <button
           onClick={submit}
           disabled={busy}
-          className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50 transition-all"
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
           Nộp bài & AI chấm
@@ -317,7 +182,7 @@ function FinalChallenge({
       </div>
 
       {result && (
-        <div className="mt-5 space-y-4">
+        <div className="mt-5 space-y-4 animate-in fade-in slide-in-from-bottom-4">
           <div className="flex items-baseline gap-3 rounded-md border border-primary/40 bg-primary/10 p-4">
             <span className="text-3xl font-bold text-primary">{result.score}</span>
             <span className="text-sm text-muted-foreground">/ 10 điểm</span>
@@ -343,4 +208,187 @@ function FinalChallenge({
       )}
     </section>
   );
-}
+};
+
+// ─── Main Page ────────────────────────────────────────
+function LessonPage() {
+  const { slug } = Route.useParams();
+  const { user } = useAuth();
+  const [lesson, setLesson] = useState<Lesson | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [readSet, setReadSet] = useState<Set<string>>(new Set());
+
+  // Fetch bài học từ Supabase (async)
+  const fetchLesson = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await lessonsStore.getAsync(slug);
+      if (!data) throw notFound();
+      setLesson(data);
+    } catch (err: any) {
+      setError(err.message || "Không thể tải bài học.");
+    } finally {
+      setLoading(false);
+    }
+  }, [slug]);
+
+  useEffect(() => {
+    fetchLesson();
+  }, [fetchLesson]);
+
+  // Load tiến độ đã lưu
+  useEffect(() => {
+    if (!user || !lesson) return;
+    progressStore.get(slug).then(p => {
+      if (!p) return;
+      const ids = lesson.blocks.slice(0, p.blocks_read).map(b => b.id);
+      setReadSet(new Set(ids));
+    });
+  }, [user, lesson, slug]);
+
+  // Lưu tiến độ
+  useEffect(() => {
+    if (!user || !lesson) return;
+    progressStore.setBlocksRead(slug, readSet.size, lesson.blocks.length);
+  }, [readSet, user, lesson, slug]);
+
+  const markRead = (id: string) => {
+    setReadSet(prev => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  };
+
+  // States xử lý giao diện
+  if (loading) {
+    return (
+      <CodeNovaLayout>
+        <div className="py-12 space-y-8 animate-pulse">
+          <div className="h-8 w-48 rounded bg-secondary" />
+          <div className="h-12 w-3/4 rounded bg-secondary" />
+          <div className="h-96 w-full rounded-lg bg-secondary" />
+          <SkeletonBlock /><SkeletonBlock />
+        </div>
+      </CodeNovaLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <CodeNovaLayout>
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <AlertCircle className="h-12 w-12 text-destructive/70 mb-4" />
+          <p className="text-muted-foreground">{error}</p>
+          <button onClick={fetchLesson} className="mt-4 inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground">
+            <RefreshCw className="h-4 w-4" /> Thử lại
+          </button>
+        </div>
+      </CodeNovaLayout>
+    );
+  }
+
+  if (!lesson) return null; // Bảo vệ an toàn
+
+  const totalBlocks = lesson.blocks.length;
+  const completedBlocks = readSet.size;
+  const progressPercent = totalBlocks > 0 ? Math.round((completedBlocks / totalBlocks) * 100) : 0;
+  const language = lesson.language ?? "javascript";
+  const langLabel = LANGUAGE_LABELS[language] || language.toUpperCase();
+
+  return (
+    <CodeNovaLayout>
+      <Link
+        to="/lessons"
+        className="mb-6 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <ArrowLeft className="h-4 w-4" /> Tất cả bài học
+      </Link>
+
+      <header className="mb-10 border-b border-border pb-8">
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <span className="rounded bg-secondary px-2.5 py-0.5 text-xs font-medium">{lesson.level}</span>
+          <span className="rounded bg-primary/15 px-2.5 py-0.5 text-xs font-medium text-primary">{langLabel}</span>
+        </div>
+
+        <h1 className="text-4xl font-bold tracking-tight">{lesson.title}</h1>
+        <p className="mt-3 max-w-2xl text-muted-foreground leading-relaxed">{lesson.description}</p>
+
+        {lesson.image && (
+          <img
+            src={lesson.image}
+            alt={lesson.title}
+            loading="lazy"
+            className="mt-6 max-h-80 w-full rounded-lg border border-border object-cover shadow-sm"
+          />
+        )}
+
+        {/* Progress bar */}
+        <div className="mt-6 rounded-md border border-border bg-card/80 p-4 backdrop-blur">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">
+              Tiến độ tự đánh dấu: <span className="font-medium text-foreground">{completedBlocks}/{totalBlocks}</span> đoạn
+              {!user && <span className="ml-2 text-amber-600">(Đăng nhập để lưu)</span>}
+            </span>
+            <span className="font-medium">{progressPercent}%</span>
+          </div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-secondary">
+            <div
+              className="h-full bg-primary transition-all duration-500 ease-out"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            Tự đọc, tự đánh dấu — không bắt buộc. Quan trọng là bạn thật sự hiểu trước khi làm thử thách.
+          </p>
+        </div>
+      </header>
+
+      <div className="space-y-10">
+        {lesson.blocks.map((b, i) => (
+          <BlockCard
+            key={b.id}
+            index={i}
+            code={b.code}
+            explanation={b.explanation}
+            language={language}
+            read={readSet.has(b.id)}
+            onMarkRead={() => markRead(b.id)}
+          />
+        ))}
+      </div>
+
+      {/* Bài tập gợi ý */}
+      {lesson.exercises.length > 0 && (
+        <section className="mt-16 rounded-lg border border-border bg-card p-6">
+          <h2 className="flex items-center gap-2 text-xl font-semibold">
+            <BookOpen className="h-5 w-5 text-primary" />
+            Bài tập gợi ý
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground">Tham khảo, tự luyện ngoài giờ.</p>
+          <ol className="mt-4 space-y-3">
+            {lesson.exercises.map((e, i) => (
+              <li key={e.id} className="flex gap-3">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-medium text-primary-foreground">
+                  {i + 1}
+                </span>
+                <p className="pt-0.5 text-sm">{e.prompt}</p>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+
+      {/* Thử thách cuối bài */}
+      <FinalChallenge
+        lesson={lesson}
+        language={language}
+        langLabel={langLabel}
+        readPct={progressPercent}
+        loggedIn={!!user}
+      />
+    </CodeNovaLayout>
+  );
+      }
