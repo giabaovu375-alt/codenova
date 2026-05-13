@@ -222,3 +222,50 @@ export async function generateExercises(topic: string, count = 3, language = "py
     return [text];
   }
 }
+
+// Thêm đoạn này vào CUỐI file ai.ts
+
+export async function generateLessonContent(
+  topic: string,
+  language = "python"
+): Promise<{
+  title: string;
+  description: string;
+  blocks: { code: string; explanation: string }[];
+  exercises: { prompt: string }[];
+}> {
+  const p = pickProvider("smart");
+  if (!p) throw new Error("Chưa có API key nào.");
+
+  const text = await chat(p, [
+    {
+      role: "system",
+      content: `Bạn là giảng viên lập trình. Tạo bài học ${language} ngắn gọn bằng tiếng Việt. 
+Trả về JSON hợp lệ theo format:
+{
+  "title": "Tiêu đề bài học",
+  "description": "Mô tả ngắn 1-2 câu",
+  "blocks": [
+    { "code": "code ví dụ", "explanation": "giải thích 1-2 câu" }
+  ],
+  "exercises": [
+    { "prompt": "Đề bài tập" }
+  ]
+}
+Sinh 5-8 blocks code và 3 bài tập. Chỉ trả về JSON, không có text khác.`,
+    },
+    {
+      role: "user",
+      content: `Tạo bài học ${language} về chủ đề: ${topic}`,
+    },
+  ]);
+
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error("AI không trả về JSON hợp lệ.");
+
+  try {
+    return JSON.parse(match[0]);
+  } catch {
+    throw new Error("Không parse được JSON từ AI.");
+  }
+}
