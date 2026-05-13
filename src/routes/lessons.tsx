@@ -1,4 +1,4 @@
-// lessons.tsx — Production Ready (Real fix: unicode, retry, performance)
+// lessons.tsx — Production Ready (Fixed type, deduplicated fetch, clean)
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -37,10 +37,6 @@ const normalize = (s: string) =>
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
 
-/**
- * Tạo chỉ mục tìm kiếm đã chuẩn hóa cho mỗi bài học.
- * Chạy một lần khi fetch, không cần normalize lại khi filter.
- */
 const buildSearchIndex = (lesson: Lesson): string => {
   const parts = [
     lesson.title,
@@ -48,6 +44,11 @@ const buildSearchIndex = (lesson: Lesson): string => {
     lesson.language ? LANGUAGE_LABELS[lesson.language] || lesson.language : "",
   ];
   return normalize(parts.join(" "));
+};
+
+// ─── Types ──────────────────────────────────────────
+type LessonWithIndex = Lesson & {
+  searchIndex: string;
 };
 
 // ─── Sub‑components ─────────────────────────────────
@@ -59,7 +60,7 @@ const LessonCard = ({
   lesson,
   index,
 }: {
-  lesson: Lesson;
+  lesson: LessonWithIndex;
   index: number;
 }) => (
   <Link
@@ -81,12 +82,10 @@ const LessonCard = ({
 
     <div className="flex flex-1 flex-col p-5">
       <div className="mb-3 flex items-center gap-2">
-        {/* Level badge */}
         <span className="rounded-full bg-secondary px-3 py-1 text-xs text-secondary-foreground">
           {LEVEL_LABELS[lesson.level] || lesson.level}
         </span>
 
-        {/* Language badge (nếu có) */}
         {lesson.language && (
           <span className="rounded-full bg-primary/10 px-3 py-1 text-xs text-primary">
             {LANGUAGE_LABELS[lesson.language] || lesson.language}
@@ -112,7 +111,7 @@ const LessonCard = ({
 
 // ─── Main Page ──────────────────────────────────────
 function LessonsPage() {
-  const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [lessons, setLessons] = useState<LessonWithIndex[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -128,16 +127,14 @@ function LessonsPage() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  // ── Fetch lessons (async thật, không fake mounted) ─
+  // ── Fetch lessons (deduplicated, no fake mounted) ──
   const fetchLessons = useCallback(async (showLoading = true) => {
     try {
       if (showLoading) setLoading(true);
       setError(null);
 
       const data = await lessonsStore.listAsync();
-
-      // Gắn chỉ mục tìm kiếm đã chuẩn hóa vào mỗi bài học
-      const enriched = data.map((l) => ({
+      const enriched: LessonWithIndex[] = data.map((l) => ({
         ...l,
         searchIndex: buildSearchIndex(l),
       }));
@@ -151,59 +148,25 @@ function LessonsPage() {
     }
   }, []);
 
-  // ── Initial load + real‑time event ────────────────
+  // ── Initial load + event listener ──────────────────
   useEffect(() => {
-    let cancelled = false;
-
-    const load = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        const data = await lessonsStore.listAsync();
-        const enriched = data.map((l) => ({
-          ...l,
-          searchIndex: buildSearchIndex(l),
-        }));
-
-        if (!cancelled) {
-          setLessons(enriched);
-        }
-      } catch (err: any) {
-        console.error("⚠️ Lessons load error:", err);
-        if (!cancelled) {
-          setError(err?.message || "Không thể tải bài học. Vui lòng thử lại.");
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-
-    load();
+    fetchLessons(true);
 
     if (typeof window !== "undefined") {
       const handler = () => fetchLessons(false);
       window.addEventListener("codenova:lessons:changed", handler);
-
       return () => {
-        cancelled = true;
         window.removeEventListener("codenova:lessons:changed", handler);
       };
     }
-
-    return () => {
-      cancelled = true;
-    };
   }, [fetchLessons]);
 
-  // ── Retry (người dùng bấm) ────────────────────────
+  // ── Retry ──────────────────────────────────────────
   const retry = () => {
     fetchLessons(true);
   };
 
-  // ── Languages extracted from real data ─────────────
+  // ── Languages từ dữ liệu thật ─────────────────────
   const languages = useMemo(() => {
     const set = new Set<string>();
     lessons.forEach((l) => {
@@ -212,7 +175,7 @@ function LessonsPage() {
     return Array.from(set).sort();
   }, [lessons]);
 
-  // ── Filtered list (real, no mock) ─────────────────
+  // ── Filtered list ──────────────────────────────────
   const filteredLessons = useMemo(() => {
     let result = lessons;
 
@@ -226,7 +189,7 @@ function LessonsPage() {
 
     const q = normalize(debouncedSearch.trim());
     if (q) {
-      result = result.filter((l) => (l as any).searchIndex?.includes(q));
+      result = result.filter((l) => l.searchIndex.includes(q));
     }
 
     return result;
@@ -239,7 +202,6 @@ function LessonsPage() {
   return (
     <CodeNovaLayout>
       <div className="mx-auto max-w-6xl px-4 pb-24 pt-10">
-        {/* Back link */}
         <Link
           to="/"
           className="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
@@ -263,7 +225,6 @@ function LessonsPage() {
             </p>
           </div>
 
-          {/* Search input */}
           <div className="relative w-full md:w-[300px]">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
@@ -285,10 +246,9 @@ function LessonsPage() {
           </div>
         </div>
 
-        {/* ── Filter chips (chỉ hiện khi có dữ liệu thật) ── */}
+        {/* ── Filter chips ──────────────────────────── */}
         {!error && lessons.length > 0 && (
           <>
-            {/* Level filter */}
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <span className="text-xs text-muted-foreground">Cấp độ:</span>
               {LEVELS.map((lvl) => (
@@ -309,7 +269,6 @@ function LessonsPage() {
               ))}
             </div>
 
-            {/* Language filter */}
             {languages.length > 0 && (
               <div className="mb-4 flex flex-wrap items-center gap-2">
                 <span className="text-xs text-muted-foreground">
@@ -348,7 +307,7 @@ function LessonsPage() {
           </>
         )}
 
-        {/* Clear filters button */}
+        {/* Clear filters */}
         {hasFilters && !error && (
           <div className="mb-4">
             <button
@@ -365,7 +324,7 @@ function LessonsPage() {
           </div>
         )}
 
-        {/* ── State: Loading ──────────────────────────── */}
+        {/* ── Loading ────────────────────────────────── */}
         {loading && (
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: SKELETON_COUNT }).map((_, i) => (
@@ -374,7 +333,7 @@ function LessonsPage() {
           </div>
         )}
 
-        {/* ── State: Error ────────────────────────────── */}
+        {/* ── Error ──────────────────────────────────── */}
         {!loading && error && (
           <div className="flex flex-col items-center justify-center rounded-2xl border border-destructive/30 bg-destructive/5 py-20 text-center">
             <AlertCircle className="mb-4 h-10 w-10 text-destructive/70" />
@@ -389,7 +348,7 @@ function LessonsPage() {
           </div>
         )}
 
-        {/* ── State: Empty (chưa có bài nào) ──────────── */}
+        {/* ── Empty ──────────────────────────────────── */}
         {!loading && !error && lessons.length === 0 && (
           <div className="flex flex-col items-center justify-center rounded-2xl border border-border bg-card/50 py-20 text-center">
             <BookOpen className="mb-4 h-10 w-10 text-muted-foreground/40" />
@@ -400,7 +359,7 @@ function LessonsPage() {
           </div>
         )}
 
-        {/* ── State: No search results ────────────────── */}
+        {/* ── No search results ──────────────────────── */}
         {!loading && !error && lessons.length > 0 && filteredLessons.length === 0 && (
           <div className="flex flex-col items-center justify-center rounded-2xl border border-border bg-card/50 py-20 text-center">
             <Search className="mb-4 h-10 w-10 text-muted-foreground/40" />
@@ -411,7 +370,7 @@ function LessonsPage() {
           </div>
         )}
 
-        {/* ── State: Success ──────────────────────────── */}
+        {/* ── Success ────────────────────────────────── */}
         {!loading && !error && filteredLessons.length > 0 && (
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {filteredLessons.map((lesson, index) => (
@@ -426,4 +385,4 @@ function LessonsPage() {
       </div>
     </CodeNovaLayout>
   );
-  }
+        }
