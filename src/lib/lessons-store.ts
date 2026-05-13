@@ -1,21 +1,7 @@
-// lessons-store.ts — Production Ready FINAL
-// Fixed:
-// ✅ level filter bug
-// ✅ unicode normalize
-// ✅ cache corruption
-// ✅ safe upsert
-// ✅ proper typing
-// ✅ immutable cache
-// ✅ SSR safe
-// ✅ retry-safe
-// ✅ no any abuse
-
+// lessons-store.ts — Fixed Level Mapping Edition
 import { supabase } from "@/integrations/supabase/client";
 
-// ─────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────
-
+// ─── Types ──────────────────────────────────────
 export type CodeBlock = {
   id: string;
   code: string;
@@ -47,29 +33,19 @@ export const LANGUAGE_LABELS: Record<LessonLanguage, string> = {
 export const LANGUAGE_COLORS: Record<LessonLanguage, string> = {
   python:
     "bg-yellow-500/10 text-yellow-600 border-yellow-500/20 dark:text-yellow-400",
-
   html:
     "bg-orange-500/10 text-orange-600 border-orange-500/20 dark:text-orange-400",
-
   css:
     "bg-blue-500/10 text-blue-600 border-blue-500/20 dark:text-blue-400",
-
   javascript:
     "bg-yellow-400/10 text-yellow-700 border-yellow-400/20 dark:text-yellow-300",
-
   java:
     "bg-red-500/10 text-red-600 border-red-500/20 dark:text-red-400",
-
   cpp:
     "bg-indigo-500/10 text-indigo-600 border-indigo-500/20 dark:text-indigo-400",
 };
 
-export type LessonLevel =
-  | "Cơ bản"
-  | "Trung cấp"
-  | "Nâng cao";
-
-export const LEVEL_LABELS: Record<LessonLevel, string> = {
+export const LEVEL_LABELS: Record<string, string> = {
   "Cơ bản": "Cơ bản",
   "Trung cấp": "Trung cấp",
   "Nâng cao": "Nâng cao",
@@ -78,7 +54,7 @@ export const LEVEL_LABELS: Record<LessonLevel, string> = {
 export type Lesson = {
   slug: string;
   title: string;
-  level: LessonLevel;
+  level: "Cơ bản" | "Trung cấp" | "Nâng cao";
   language?: LessonLanguage;
   description: string;
   image?: string;
@@ -87,10 +63,7 @@ export type Lesson = {
   createdAt: number;
 };
 
-// ─────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────
-
+// ─── Helpers ────────────────────────────────────
 function generateUID(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
     return crypto.randomUUID().slice(0, 8);
@@ -101,83 +74,64 @@ function generateUID(): string {
 
 function notify() {
   if (typeof window !== "undefined") {
-    window.dispatchEvent(
-      new Event("codenova:lessons:changed")
-    );
+    window.dispatchEvent(new Event("codenova:lessons:changed"));
   }
 }
 
-function normalizeText(s: string): string {
-  return s
+function normalizeText(text?: string): string {
+  return (text || "")
     .toLowerCase()
-    .trim()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/đ/g, "d");
+    .replace(/[\u0300-\u036f]/g, "");
 }
 
-// ─────────────────────────────────────────────
-// Normalize level
-// FIX LEVEL BUG
-// ─────────────────────────────────────────────
+/**
+ * FIX LEVEL BUG
+ */
+function normalizeLevel(
+  level?: string
+): "Cơ bản" | "Trung cấp" | "Nâng cao" {
+  const l = normalizeText(level);
 
-function normalizeLevel(level?: string): LessonLevel {
-  const cleaned = normalizeText(level || "");
-
-  if (cleaned === "co ban") {
-    return "Cơ bản";
-  }
-
-  if (cleaned === "trung cap") {
+  // Trung cấp
+  if (
+    l.includes("trung") ||
+    l.includes("intermediate")
+  ) {
     return "Trung cấp";
   }
 
-  if (cleaned === "nang cao") {
+  // Nâng cao
+  if (
+    l.includes("nang") ||
+    l.includes("advanced")
+  ) {
     return "Nâng cao";
   }
 
+  // Cơ bản
   return "Cơ bản";
 }
 
-// ─────────────────────────────────────────────
-// Supabase Row -> Lesson
-// ─────────────────────────────────────────────
-
+// Map raw Supabase row -> Lesson
 function mapRow(row: any): Lesson {
   return {
     slug: row.slug,
-
     title: row.title,
-
     level: normalizeLevel(row.level),
-
-    language:
-      row.language as LessonLanguage | undefined,
-
+    language: row.language as LessonLanguage | undefined,
     description: row.description ?? "",
-
     image: row.image ?? undefined,
-
-    blocks: Array.isArray(row.blocks)
-      ? row.blocks
-      : [],
-
+    blocks: Array.isArray(row.blocks) ? row.blocks : [],
     exercises: Array.isArray(row.exercises)
       ? row.exercises
       : [],
-
-    createdAt: row.created_at
-      ? new Date(row.created_at).getTime()
-      : Date.now(),
+    createdAt: new Date(row.created_at).getTime(),
   };
 }
 
-// ─────────────────────────────────────────────
-// Cache
-// ─────────────────────────────────────────────
-
+// ─── Cache ──────────────────────────────────────
 let _lessonsCache: Lesson[] | null = null;
-
 let _cacheTimestamp = 0;
 
 const CACHE_TTL_MS = 30_000;
@@ -189,15 +143,11 @@ function isCacheValid(): boolean {
   );
 }
 
-// ─────────────────────────────────────────────
-// Store
-// ─────────────────────────────────────────────
-
+// ─── Store ──────────────────────────────────────
 export const lessonsStore = {
-  // ───────────────────────────────────────────
-  // List async
-  // ───────────────────────────────────────────
-
+  /**
+   * List async
+   */
   async listAsync(force = false): Promise<Lesson[]> {
     if (!force && isCacheValid()) {
       return [..._lessonsCache!];
@@ -225,36 +175,32 @@ export const lessonsStore = {
     const lessons = (data ?? []).map(mapRow);
 
     _lessonsCache = lessons;
-
     _cacheTimestamp = Date.now();
 
     return [...lessons];
   },
 
-  // ───────────────────────────────────────────
-  // Sync list from cache
-  // ───────────────────────────────────────────
-
+  /**
+   * Sync list
+   */
   list(): Lesson[] {
     return _lessonsCache
       ? [..._lessonsCache]
       : [];
   },
 
-  // ───────────────────────────────────────────
-  // Get from cache
-  // ───────────────────────────────────────────
-
+  /**
+   * Get cached lesson
+   */
   get(slug: string): Lesson | undefined {
     return _lessonsCache?.find(
       (l) => l.slug === slug
     );
   },
 
-  // ───────────────────────────────────────────
-  // Get async
-  // ───────────────────────────────────────────
-
+  /**
+   * Get async lesson
+   */
   async getAsync(
     slug: string
   ): Promise<Lesson | undefined> {
@@ -276,36 +222,28 @@ export const lessonsStore = {
     return mapRow(data);
   },
 
-  // ───────────────────────────────────────────
-  // Upsert
-  // ───────────────────────────────────────────
-
-  async upsert(lesson: Lesson): Promise<void> {
-    const payload = {
-      slug: lesson.slug,
-
-      title: lesson.title,
-
-      level: normalizeLevel(lesson.level),
-
-      language: lesson.language ?? null,
-
-      description: lesson.description,
-
-      image: lesson.image ?? null,
-
-      blocks: lesson.blocks,
-
-      exercises: lesson.exercises,
-
-      created_at: new Date(
-        lesson.createdAt
-      ).toISOString(),
-    };
-
+  /**
+   * Upsert lesson
+   */
+  async upsert(
+    lesson: Lesson
+  ): Promise<void> {
     const { error } = await supabase
       .from("lessons")
-      .upsert(payload);
+      .upsert({
+        slug: lesson.slug,
+        title: lesson.title,
+        level: lesson.level,
+        language:
+          lesson.language ?? null,
+        description: lesson.description,
+        image: lesson.image ?? null,
+        blocks: lesson.blocks,
+        exercises: lesson.exercises,
+        created_at: new Date(
+          lesson.createdAt
+        ).toISOString(),
+      });
 
     if (error) {
       console.error(
@@ -318,32 +256,18 @@ export const lessonsStore = {
       );
     }
 
-    // FIX CACHE CORRUPTION
-    const safeLesson: Lesson = {
-      ...lesson,
-      level: normalizeLevel(lesson.level),
-    };
-
-    if (_lessonsCache) {
-      const idx = _lessonsCache.findIndex(
-        (l) => l.slug === lesson.slug
-      );
-
-      if (idx >= 0) {
-        _lessonsCache[idx] = safeLesson;
-      } else {
-        _lessonsCache.unshift(safeLesson);
-      }
-    }
+    // Refresh cache
+    await this.listAsync(true);
 
     notify();
   },
 
-  // ───────────────────────────────────────────
-  // Remove
-  // ───────────────────────────────────────────
-
-  async remove(slug: string): Promise<void> {
+  /**
+   * Delete lesson
+   */
+  async remove(
+    slug: string
+  ): Promise<void> {
     const { error } = await supabase
       .from("lessons")
       .delete()
@@ -370,24 +294,29 @@ export const lessonsStore = {
     notify();
   },
 
-  // ───────────────────────────────────────────
-  // Reset cache
-  // ───────────────────────────────────────────
-
+  /**
+   * Reset cache
+   */
   reset() {
     _lessonsCache = null;
     _cacheTimestamp = 0;
   },
 
-  // ───────────────────────────────────────────
-  // Utils
-  // ───────────────────────────────────────────
-
+  /**
+   * Generate short id
+   */
   newId: generateUID,
 
+  /**
+   * Slugify
+   */
   slugify(s: string): string {
     return (
-      normalizeText(s)
+      s
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/đ/g, "d")
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/(^-|-$)/g, "")
         .slice(0, 60) ||
