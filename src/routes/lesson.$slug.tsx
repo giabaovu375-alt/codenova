@@ -381,7 +381,7 @@ function LessonPage() {
         </section>
       )}
 
-      {/* Thử thách cuối bài */}
+            {/* Thử thách cuối bài */}
       <FinalChallenge
         lesson={lesson}
         language={language}
@@ -391,4 +391,6 @@ function LessonPage() {
       />
     </CodeNovaLayout>
   );
-      
+}
+
+// Đảm bảo không có dấu ngoặc nào sau dòng này
