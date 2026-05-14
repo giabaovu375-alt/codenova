@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Editor, { type OnMount } from "@monaco-editor/react";
 import {
   Loader2,
@@ -76,21 +76,40 @@ function Playground() {
   const [err, setErr] = useState("");
   const [copied, setCopied] = useState(false);
   const [pyReady, setPyReady] = useState(false);
-  const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
 
-  const code = codeMap[lang];
-  const setCode = (v: string) => setCodeMap((m) => ({ ...m, [lang]: v }));
-  const langMeta = useMemo(() => LANGS.find((l) => l.id === lang)!, [lang]);
+  // ─── Khôi phục code từ localStorage khi mount ───
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("codenova-playground");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed === "object" && parsed !== null) {
+          setCodeMap((prev) => ({ ...prev, ...parsed }));
+        }
+      }
+    } catch {}
+  }, []);
 
-  // Khởi động Pyodide ngầm khi chọn Python
-  useState(() => {
+  // ─── Tự động lưu code vào localStorage khi thay đổi ───
+  useEffect(() => {
+    try {
+      localStorage.setItem("codenova-playground", JSON.stringify(codeMap));
+    } catch {}
+  }, [codeMap]);
+
+  // ─── Preload Pyodide khi chọn Python ───
+  useEffect(() => {
     if (lang === "python" && !pyReady) {
       import("@/lib/pyodide-runner")
         .then((m) => m.getPyodide())
         .then(() => setPyReady(true))
         .catch(() => setRunErr("Không thể tải Python runtime."));
     }
-  });
+  }, [lang, pyReady]);
+
+  const code = codeMap[lang];
+  const setCode = (v: string) => setCodeMap((m) => ({ ...m, [lang]: v }));
+  const langMeta = useMemo(() => LANGS.find((l) => l.id === lang)!, [lang]);
 
   const handleMount: OnMount = (_editor, monaco) => {
     monaco.editor.defineTheme("nova-dark", {
@@ -427,4 +446,4 @@ function Playground() {
       </div>
     </CodeNovaLayout>
   );
-}
+      }
