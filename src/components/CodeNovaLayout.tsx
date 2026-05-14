@@ -1,7 +1,8 @@
-import { Link, useRouterState } from "@tanstack/react-router";
-import { ReactNode } from "react";
+import { Link, useRouterState, useLocation } from "@tanstack/react-router";
+import { ReactNode, useEffect, useRef } from "react";
 import { LogIn, LogOut } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import ReactGA from "react-ga4";
 
 function NovaLogo() {
   return (
@@ -34,6 +35,22 @@ function NavLink({ to, children }: { to: string; children: ReactNode }) {
 
 export function CodeNovaLayout({ children }: { children: ReactNode }) {
   const { user, isAdmin, signOut } = useAuth();
+
+  // Google Analytics tracking
+  const gaReady = useRef(false);
+  useEffect(() => {
+    if (!gaReady.current) {
+      ReactGA.initialize("G-JZX5SX1Y3K");
+      gaReady.current = true;
+    }
+  }, []);
+
+  const location = useLocation();
+  useEffect(() => {
+    if (gaReady.current) {
+      ReactGA.send({ hitType: "pageview", page: location.pathname });
+    }
+  }, [location]);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
