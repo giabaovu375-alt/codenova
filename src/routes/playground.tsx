@@ -1,6 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useRef, useState } from "react";
-import Editor, { type OnMount } from "@monaco-editor/react";
+import { useMemo, useState } from "react";
 import {
   Loader2,
   Sparkles,
@@ -13,20 +12,22 @@ import {
 } from "lucide-react";
 import { CodeNovaLayout } from "@/components/CodeNovaLayout";
 import { explainCode, fixCode, hasAnyKey, PROVIDERS, getApiKey } from "@/lib/ai";
+import { runPython } from "@/lib/pyodide-runner"; // 👈 thêm dòng này
 
 export const Route = createFileRoute("/playground")({
   head: () => ({ meta: [{ title: "AI Playground — Code Nova" }] }),
   component: Playground,
 });
 
-type LangId = "javascript" | "html" | "css" | "cpp" | "java";
+type LangId = "javascript" | "html" | "css" | "python" | "cpp" | "java";
 
-const LANGS: { id: LangId; name: string; monaco: string; runnable: boolean }[] = [
-  { id: "javascript", name: "JavaScript", monaco: "javascript", runnable: true },
-  { id: "html", name: "HTML", monaco: "html", runnable: true },
-  { id: "css", name: "CSS", monaco: "css", runnable: true },
-  { id: "cpp", name: "C++", monaco: "cpp", runnable: false },
-  { id: "java", name: "Java", monaco: "java", runnable: false },
+const LANGS: { id: LangId; name: string; runnable: boolean }[] = [
+  { id: "javascript", name: "JavaScript", runnable: true },
+  { id: "html", name: "HTML", runnable: true },
+  { id: "css", name: "CSS", runnable: true },
+  { id: "python", name: "Python", runnable: true }, // 👈 thêm Python
+  { id: "cpp", name: "C++", runnable: false },
+  { id: "java", name: "Java", runnable: false },
 ];
 
 const STARTERS: Record<LangId, string> = {
@@ -44,6 +45,10 @@ greet("Nova");`,
 </html>`,
   css: `body { background: #0a0a0f; color: white; font-family: sans-serif; }
 h1 { color: #a78bfa; }`,
+  python: `def greet(name):
+    print(f"Hi {name}")
+
+greet("Nova")`, // 👈 thêm Python starter
   cpp: `#include <iostream>
 using namespace std;
 
@@ -73,28 +78,6 @@ function Playground() {
   const code = codeMap[lang];
   const setCode = (v: string) => setCodeMap((m) => ({ ...m, [lang]: v }));
   const langMeta = useMemo(() => LANGS.find((l) => l.id === lang)!, [lang]);
-
-  const handleMount: OnMount = (_editor, monaco) => {
-    monaco.editor.defineTheme("nova-dark", {
-      base: "vs-dark",
-      inherit: true,
-      rules: [
-        { token: "comment", foreground: "6b7280", fontStyle: "italic" },
-        { token: "keyword", foreground: "c084fc" },
-        { token: "string", foreground: "86efac" },
-        { token: "number", foreground: "fbbf24" },
-      ],
-      colors: {
-        "editor.background": "#0a0a0f",
-        "editor.lineHighlightBackground": "#16161f",
-        "editorLineNumber.foreground": "#3f3f46",
-        "editorLineNumber.activeForeground": "#a78bfa",
-        "editorCursor.foreground": "#a78bfa",
-        "editor.selectionBackground": "#3b3b5c",
-      },
-    });
-    monaco.editor.setTheme("nova-dark");
-  };
 
   async function handleRun() {
     setLoading("run");
@@ -127,6 +110,11 @@ function Playground() {
         setPreviewSrc(
           `<!doctype html><html><head><style>${code}</style></head><body><h1>Heading</h1><p>Paragraph text để xem CSS của bạn.</p><button>Button</button></body></html>`,
         );
+      } else if (lang === "python") {
+        // 👈 Chạy Python bằng Pyodide
+        const { stdout, error } = await runPython(code);
+        setRunOut(stdout || "(không có output)");
+        if (error) setRunErr(error);
       } else {
         setRunErr(
           `Chạy ${langMeta.name} cần backend compiler. Hãy dùng "Chữa code" / "Giải thích" để AI hỗ trợ.`,
@@ -159,7 +147,7 @@ function Playground() {
   }
 
   function applyFix() {
-    const re = new RegExp("```(?:" + langMeta.monaco + "|\\w+)?\\n([\\s\\S]*?)```");
+    const re = new RegExp("```(?:" + langMeta.name.toLowerCase() + "|\\w+)?\\n([\\s\\S]*?)```");
     const m = aiOut.match(re);
     if (m) setCode(m[1].trim());
   }
@@ -239,7 +227,7 @@ function Playground() {
             <span className="h-3 w-3 rounded-full bg-yellow-500/80" />
             <span className="h-3 w-3 rounded-full bg-green-500/80" />
             <span className="ml-3 text-xs font-mono text-muted-foreground">
-              main.{lang === "javascript" ? "js" : lang === "cpp" ? "cpp" : lang === "java" ? "java" : lang}
+              main.{lang === "javascript" ? "js" : lang === "python" ? "py" : lang === "cpp" ? "cpp" : lang === "java" ? "java" : lang}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -268,29 +256,13 @@ function Playground() {
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-b-xl">
-          <Editor
-            height="380px"
-            language={langMeta.monaco}
-            path={`main.${lang}`}
-            value={code}
-            onChange={(v) => setCode(v ?? "")}
-            onMount={handleMount}
-            options={{
-              fontSize: 14,
-              fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-              fontLigatures: true,
-              minimap: { enabled: false },
-              scrollBeyondLastLine: false,
-              padding: { top: 16, bottom: 16 },
-              smoothScrolling: true,
-              cursorBlinking: "smooth",
-              cursorSmoothCaretAnimation: "on",
-              renderLineHighlight: "all",
-              tabSize: 2,
-            }}
-          />
-        </div>
+        <textarea
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          spellCheck={false}
+          className="block w-full h-[380px] bg-[#0a0a0f] p-4 font-mono text-sm text-[oklch(0.92_0_0)] resize-none focus:outline-none rounded-b-xl"
+          placeholder={`// Viết code ${langMeta.name} ở đây...`}
+        />
       </div>
 
       {/* Output */}
