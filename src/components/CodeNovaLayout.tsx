@@ -2,8 +2,8 @@ import { Link, useRouterState, useLocation } from "@tanstack/react-router";
 import { ReactNode, useEffect, useRef } from "react";
 import { LogIn, LogOut } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import ReactGA from "react-ga4";
 
+// --- Các component con giữ nguyên ---
 function NovaLogo() {
   return (
     <div className="flex items-center gap-2">
@@ -36,21 +36,30 @@ function NavLink({ to, children }: { to: string; children: ReactNode }) {
 export function CodeNovaLayout({ children }: { children: ReactNode }) {
   const { user, isAdmin, signOut } = useAuth();
 
-  // Google Analytics tracking
-  const gaReady = useRef(false);
-  useEffect(() => {
-    if (!gaReady.current) {
-      ReactGA.initialize("G-JZX5SX1Y3K");
-      gaReady.current = true;
-    }
-  }, []);
+  // Google Analytics
+  const gaInitialized = useRef(false);
 
-  const location = useLocation();
   useEffect(() => {
-    if (gaReady.current) {
-      ReactGA.send({ hitType: "pageview", page: location.pathname });
-    }
-  }, [location]);
+    // Chỉ chạy 1 lần duy nhất
+    if (gaInitialized.current) return;
+    gaInitialized.current = true;
+
+    // 1. Tạo thẻ script tải gtag.js từ Google
+    const script1 = document.createElement("script");
+    script1.async = true;
+    script1.src = "https://www.googletagmanager.com/gtag/js?id=G-JZX5SX1Y3K";
+    document.head.appendChild(script1);
+
+    // 2. Tạo thẻ script cấu hình gtag
+    const script2 = document.createElement("script");
+    script2.textContent = `
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-JZX5SX1Y3K');
+    `;
+    document.head.appendChild(script2);
+  }, []);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
