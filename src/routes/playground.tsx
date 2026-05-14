@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import Editor, { type OnMount } from "@monaco-editor/react";
 import {
   Loader2,
   Sparkles,
@@ -12,7 +13,7 @@ import {
 } from "lucide-react";
 import { CodeNovaLayout } from "@/components/CodeNovaLayout";
 import { explainCode, fixCode, hasAnyKey, PROVIDERS, getApiKey } from "@/lib/ai";
-import { runPython } from "@/lib/pyodide-runner"; // 👈 thêm dòng này
+import { runPython } from "@/lib/pyodide-runner";
 
 export const Route = createFileRoute("/playground")({
   head: () => ({ meta: [{ title: "AI Playground — Code Nova" }] }),
@@ -21,13 +22,13 @@ export const Route = createFileRoute("/playground")({
 
 type LangId = "javascript" | "html" | "css" | "python" | "cpp" | "java";
 
-const LANGS: { id: LangId; name: string; runnable: boolean }[] = [
-  { id: "javascript", name: "JavaScript", runnable: true },
-  { id: "html", name: "HTML", runnable: true },
-  { id: "css", name: "CSS", runnable: true },
-  { id: "python", name: "Python", runnable: true }, // 👈 thêm Python
-  { id: "cpp", name: "C++", runnable: false },
-  { id: "java", name: "Java", runnable: false },
+const LANGS: { id: LangId; name: string; monaco: string; runnable: boolean }[] = [
+  { id: "javascript", name: "JavaScript", monaco: "javascript", runnable: true },
+  { id: "html", name: "HTML", monaco: "html", runnable: true },
+  { id: "css", name: "CSS", monaco: "css", runnable: true },
+  { id: "python", name: "Python", monaco: "python", runnable: true },
+  { id: "cpp", name: "C++", monaco: "cpp", runnable: false },
+  { id: "java", name: "Java", monaco: "java", runnable: false },
 ];
 
 const STARTERS: Record<LangId, string> = {
@@ -48,7 +49,7 @@ h1 { color: #a78bfa; }`,
   python: `def greet(name):
     print(f"Hi {name}")
 
-greet("Nova")`, // 👈 thêm Python starter
+greet("Nova")`,
   cpp: `#include <iostream>
 using namespace std;
 
@@ -74,10 +75,44 @@ function Playground() {
   const [loading, setLoading] = useState<"" | "fix" | "explain" | "run">("");
   const [err, setErr] = useState("");
   const [copied, setCopied] = useState(false);
+  const [pyReady, setPyReady] = useState(false);
+  const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
 
   const code = codeMap[lang];
   const setCode = (v: string) => setCodeMap((m) => ({ ...m, [lang]: v }));
   const langMeta = useMemo(() => LANGS.find((l) => l.id === lang)!, [lang]);
+
+  // Khởi động Pyodide ngầm khi chọn Python
+  useState(() => {
+    if (lang === "python" && !pyReady) {
+      import("@/lib/pyodide-runner")
+        .then((m) => m.getPyodide())
+        .then(() => setPyReady(true))
+        .catch(() => setRunErr("Không thể tải Python runtime."));
+    }
+  });
+
+  const handleMount: OnMount = (_editor, monaco) => {
+    monaco.editor.defineTheme("nova-dark", {
+      base: "vs-dark",
+      inherit: true,
+      rules: [
+        { token: "comment", foreground: "6b7280", fontStyle: "italic" },
+        { token: "keyword", foreground: "c084fc" },
+        { token: "string", foreground: "86efac" },
+        { token: "number", foreground: "fbbf24" },
+      ],
+      colors: {
+        "editor.background": "#0a0a0f",
+        "editor.lineHighlightBackground": "#16161f",
+        "editorLineNumber.foreground": "#3f3f46",
+        "editorLineNumber.activeForeground": "#a78bfa",
+        "editorCursor.foreground": "#a78bfa",
+        "editor.selectionBackground": "#3b3b5c",
+      },
+    });
+    monaco.editor.setTheme("nova-dark");
+  };
 
   async function handleRun() {
     setLoading("run");
@@ -93,7 +128,6 @@ function Playground() {
           orig(...a);
         };
         try {
-          // eslint-disable-next-line no-new-func
           const fn = new Function(code);
           const ret = await fn();
           if (ret !== undefined) logs.push(String(ret));
@@ -111,7 +145,6 @@ function Playground() {
           `<!doctype html><html><head><style>${code}</style></head><body><h1>Heading</h1><p>Paragraph text để xem CSS của bạn.</p><button>Button</button></body></html>`,
         );
       } else if (lang === "python") {
-        // 👈 Chạy Python bằng Pyodide
         const { stdout, error } = await runPython(code);
         setRunOut(stdout || "(không có output)");
         if (error) setRunErr(error);
@@ -147,7 +180,7 @@ function Playground() {
   }
 
   function applyFix() {
-    const re = new RegExp("```(?:" + langMeta.name.toLowerCase() + "|\\w+)?\\n([\\s\\S]*?)```");
+    const re = new RegExp("```(?:" + langMeta.monaco + "|\\w+)?\\n([\\s\\S]*?)```");
     const m = aiOut.match(re);
     if (m) setCode(m[1].trim());
   }
@@ -160,7 +193,6 @@ function Playground() {
 
   return (
     <CodeNovaLayout>
-      {/* Header */}
       <div className="mb-8 flex items-end justify-between gap-4 flex-wrap">
         <div>
           <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-3 py-1 text-xs text-primary">
@@ -176,7 +208,6 @@ function Playground() {
             Viết code, chạy trực tiếp và để AI giải thích hoặc sửa lỗi cho bạn.
           </p>
         </div>
-
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <span className="text-muted-foreground">Provider:</span>
           {PROVIDERS.map((p: { id: string; name: string }) => {
@@ -201,7 +232,6 @@ function Playground() {
         </div>
       </div>
 
-      {/* Language tabs */}
       <div className="mb-3 flex flex-wrap gap-1.5">
         {LANGS.map((l) => (
           <button
@@ -219,7 +249,6 @@ function Playground() {
         ))}
       </div>
 
-      {/* Editor */}
       <div className="rounded-2xl border border-border bg-gradient-to-b from-card to-background p-1 shadow-2xl shadow-primary/5">
         <div className="flex items-center justify-between gap-2 border-b border-border/60 px-4 py-2.5">
           <div className="flex items-center gap-1.5">
@@ -256,16 +285,31 @@ function Playground() {
           </div>
         </div>
 
-        <textarea
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-          spellCheck={false}
-          className="block w-full h-[380px] bg-[#0a0a0f] p-4 font-mono text-sm text-[oklch(0.92_0_0)] resize-none focus:outline-none rounded-b-xl"
-          placeholder={`// Viết code ${langMeta.name} ở đây...`}
-        />
+        <div className="overflow-hidden rounded-b-xl">
+          <Editor
+            height="380px"
+            language={langMeta.monaco}
+            path={`main.${lang}`}
+            value={code}
+            onChange={(v) => setCode(v ?? "")}
+            onMount={handleMount}
+            options={{
+              fontSize: 14,
+              fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+              fontLigatures: true,
+              minimap: { enabled: false },
+              scrollBeyondLastLine: false,
+              padding: { top: 16, bottom: 16 },
+              smoothScrolling: true,
+              cursorBlinking: "smooth",
+              cursorSmoothCaretAnimation: "on",
+              renderLineHighlight: "all",
+              tabSize: 2,
+            }}
+          />
+        </div>
       </div>
 
-      {/* Output */}
       <div className="mt-4 rounded-2xl border border-border bg-[oklch(0.10_0_0)] overflow-hidden">
         <div className="flex items-center justify-between border-b border-border/60 px-4 py-2">
           <div className="inline-flex items-center gap-2 text-xs font-mono text-muted-foreground">
@@ -308,7 +352,6 @@ function Playground() {
         )}
       </div>
 
-      {/* AI Section */}
       <div className="mt-8">
         <div className="mb-4 flex items-center gap-3">
           <div className="h-px flex-1 bg-gradient-to-r from-transparent via-border to-transparent" />
