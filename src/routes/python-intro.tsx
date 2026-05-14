@@ -1,20 +1,18 @@
 // python-intro.tsx — Premium Landing Page for Python
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState, useRef } from "react";
-import { CodeNovaLayout } from "@/components/CodeNovaLayout"; // nếu muốn bọc layout chung, có thể bỏ dòng này và dùng layout riêng
 import { CodeBlock } from "@/components/CodeBlock";
 import {
+  ArrowLeft,
   BookOpen,
-  Download,
   Briefcase,
   Lightbulb,
-  ArrowRight,
   Target,
   CheckCircle,
   ChevronUp,
 } from "lucide-react";
 
-// Ảnh — nếu chưa có, để chuỗi rỗng và component sẽ hiện placeholder
+// Ảnh — nếu chưa có, component SafeImage sẽ hiện placeholder
 import pythonHero from "@/assets/python-hero.jpg";
 import pythonInstall from "@/assets/python-install.jpg";
 import pythonCareers from "@/assets/python-careers.jpg";
@@ -129,6 +127,17 @@ function PythonIntroPage() {
           </button>
         </div>
       </header>
+
+      {/* ← Nút quay lại trang chủ */}
+      <div className="mx-auto max-w-6xl px-4 pt-6">
+        <Link
+          to="/"
+          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Quay lại trang chủ
+        </Link>
+      </div>
 
       {/* Hero */}
       <section className="relative overflow-hidden border-b border-border bg-card">
