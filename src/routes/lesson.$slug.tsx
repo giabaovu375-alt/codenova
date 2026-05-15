@@ -28,6 +28,7 @@ import {
 import { explainCode, gradeSubmission, hasAnyKey } from "@/lib/ai";
 import { progressStore } from "@/lib/progress-store";
 import { useAuth } from "@/lib/auth";
+import { PracticeMode } from "@/components/PracticeMode";
 
 export const Route = createFileRoute("/lesson/$slug")({
   component: LessonPage,
@@ -522,6 +523,8 @@ function LessonPage() {
           </ol>
         </section>
       )}
+
+      <PracticeMode lesson={lesson} />
 
       <FinalChallenge
         lesson={lesson}
