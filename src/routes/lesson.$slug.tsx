@@ -1,4 +1,4 @@
-// lesson.$slug.tsx — Production-Ready Final (Fixed notFound + retry)
+// lesson.$slug.tsx — Production-Ready Final (Fixed notFound + retry + Practice Mode toggle)
 import React, {
   useEffect,
   useMemo,
@@ -17,6 +17,7 @@ import {
   BookOpen,
   AlertCircle,
   RefreshCw,
+  Dumbbell,
 } from "lucide-react";
 import { CodeNovaLayout } from "@/components/CodeNovaLayout";
 import { CodeBlock } from "@/components/CodeBlock";
@@ -301,6 +302,7 @@ function LessonPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [readSet, setReadSet] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<"lesson" | "practice">("lesson");
 
   // Fetch bài học (chống memory leak)
   const fetchLesson = useCallback(async () => {
@@ -313,15 +315,14 @@ function LessonPage() {
 
       if (!cancelled) {
         if (!data) {
-          throw notFound(); // ✅ FIXED: throw notFound để Router xử lý
+          throw notFound();
         }
         setLesson(data);
       }
     } catch (err: any) {
       if (!cancelled) {
-        // Nếu là lỗi notFound thì không set error
         if (err?.isNotFound || err?.status === 404) {
-          throw err; // Re-throw để Router bắt
+          throw err;
         }
         setError(err.message || "Không thể tải bài học.");
       }
@@ -404,7 +405,6 @@ function LessonPage() {
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <AlertCircle className="h-12 w-12 text-destructive/70 mb-4" />
           <p className="text-muted-foreground">{error}</p>
-          {/* ✅ FIXED: Nút retry mềm, không reload toàn trang */}
           <button
             onClick={fetchLesson}
             className="mt-4 inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground"
@@ -435,13 +435,40 @@ function LessonPage() {
       </Link>
 
       <header className="mb-10 border-b border-border pb-8">
-        <div className="flex flex-wrap items-center gap-2 mb-3">
-          <span className="rounded bg-secondary px-2.5 py-0.5 text-xs font-medium">
-            {lesson.level}
-          </span>
-          <span className="rounded bg-primary/15 px-2.5 py-0.5 text-xs font-medium text-primary">
-            {langLabel}
-          </span>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2">
+            <span className="rounded bg-secondary px-2.5 py-0.5 text-xs font-medium">
+              {lesson.level}
+            </span>
+            <span className="rounded bg-primary/15 px-2.5 py-0.5 text-xs font-medium text-primary">
+              {langLabel}
+            </span>
+          </div>
+          {/* Toggle giữa Bài học và Luyện tập */}
+          <div className="inline-flex rounded-md border border-border bg-background p-0.5">
+            <button
+              onClick={() => setViewMode("lesson")}
+              className={`inline-flex items-center gap-1.5 rounded px-3 py-1 text-xs font-medium transition-colors ${
+                viewMode === "lesson"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <BookOpen className="h-3.5 w-3.5" />
+              Bài học
+            </button>
+            <button
+              onClick={() => setViewMode("practice")}
+              className={`inline-flex items-center gap-1.5 rounded px-3 py-1 text-xs font-medium transition-colors ${
+                viewMode === "practice"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Dumbbell className="h-3.5 w-3.5" />
+              Luyện tập
+            </button>
+          </div>
         </div>
 
         <h1 className="text-4xl font-bold tracking-tight">{lesson.title}</h1>
@@ -458,81 +485,87 @@ function LessonPage() {
           />
         )}
 
-        <div className="mt-6 rounded-md border border-border bg-card/80 p-4 backdrop-blur">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">
-              Tiến độ tự đánh dấu:{" "}
-              <span className="font-medium text-foreground">
-                {completedBlocks}/{totalBlocks}
-              </span>{" "}
-              đoạn
-              {!user && (
-                <span className="ml-2 text-amber-600">
-                  (Đăng nhập để lưu)
-                </span>
-              )}
-            </span>
-            <span className="font-medium">{progressPercent}%</span>
+        {viewMode === "lesson" && (
+          <div className="mt-6 rounded-md border border-border bg-card/80 p-4 backdrop-blur">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">
+                Tiến độ tự đánh dấu:{" "}
+                <span className="font-medium text-foreground">
+                  {completedBlocks}/{totalBlocks}
+                </span>{" "}
+                đoạn
+                {!user && (
+                  <span className="ml-2 text-amber-600">
+                    (Đăng nhập để lưu)
+                  </span>
+                )}
+              </span>
+              <span className="font-medium">{progressPercent}%</span>
+            </div>
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-secondary">
+              <div
+                className="h-full bg-primary transition-all duration-500 ease-out"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+            <p className="mt-3 text-[11px] text-muted-foreground">
+              Tự đọc, tự đánh dấu — không bắt buộc. Quan trọng là bạn thật sự
+              hiểu trước khi làm thử thách.
+            </p>
           </div>
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-secondary">
-            <div
-              className="h-full bg-primary transition-all duration-500 ease-out"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-          <p className="mt-3 text-[11px] text-muted-foreground">
-            Tự đọc, tự đánh dấu — không bắt buộc. Quan trọng là bạn thật sự hiểu
-            trước khi làm thử thách.
-          </p>
-        </div>
+        )}
       </header>
 
-      <div className="space-y-10">
-        {lesson.blocks.map((b, i) => (
-          <BlockCard
-            key={b.id}
-            blockId={b.id}
-            index={i}
-            code={b.code}
-            explanation={b.explanation}
-            language={language}
-            read={readSet.has(b.id)}
-            onMarkRead={markRead}
-          />
-        ))}
-      </div>
-
-      {lesson.exercises.length > 0 && (
-        <section className="mt-16 rounded-lg border border-border bg-card p-6">
-          <h2 className="flex items-center gap-2 text-xl font-semibold">
-            <BookOpen className="h-5 w-5 text-primary" />
-            Bài tập gợi ý
-          </h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Tham khảo, tự luyện ngoài giờ.
-          </p>
-          <ol className="mt-4 space-y-3">
-            {lesson.exercises.map((e, i) => (
-              <li key={e.id} className="flex gap-3">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-medium text-primary-foreground">
-                  {i + 1}
-                </span>
-                <p className="pt-0.5 text-sm">{e.prompt}</p>
-              </li>
+      {viewMode === "lesson" ? (
+        <>
+          <div className="space-y-10">
+            {lesson.blocks.map((b, i) => (
+              <BlockCard
+                key={b.id}
+                blockId={b.id}
+                index={i}
+                code={b.code}
+                explanation={b.explanation}
+                language={language}
+                read={readSet.has(b.id)}
+                onMarkRead={markRead}
+              />
             ))}
-          </ol>
-        </section>
+          </div>
+
+          {lesson.exercises.length > 0 && (
+            <section className="mt-16 rounded-lg border border-border bg-card p-6">
+              <h2 className="flex items-center gap-2 text-xl font-semibold">
+                <BookOpen className="h-5 w-5 text-primary" />
+                Bài tập gợi ý
+              </h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Tham khảo, tự luyện ngoài giờ.
+              </p>
+              <ol className="mt-4 space-y-3">
+                {lesson.exercises.map((e, i) => (
+                  <li key={e.id} className="flex gap-3">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-medium text-primary-foreground">
+                      {i + 1}
+                    </span>
+                    <p className="pt-0.5 text-sm">{e.prompt}</p>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
+
+          <FinalChallenge
+            lesson={lesson}
+            language={language}
+            langLabel={langLabel}
+            readPct={progressPercent}
+            loggedIn={!!user}
+          />
+        </>
+      ) : (
+        <PracticeMode lesson={lesson as any} />
       )}
-
-      <PracticeMode lesson={lesson} />
-
-      <FinalChallenge
-        lesson={lesson}
-        language={language}
-        langLabel={langLabel}
-        readPct={progressPercent}
-        loggedIn={!!user}
-      />
     </CodeNovaLayout>
   );
-  }
+}
