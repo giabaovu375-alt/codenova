@@ -1,7 +1,5 @@
-// components/AdminEditor.tsx — Premium Editor v2
-// Fix: delete target type, draft overwrite, corrupt draft cleanup, image size limit,
-// AI loading state, unused imports removed
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+// components/AdminEditor.tsx — Premium Editor v2 (Fixed newId)
+import { useEffect, useMemo, useState } from "react";
 import {
   Plus, Trash2, Image as ImageIcon, Sparkles, Save, X,
   AlertTriangle, Loader2
@@ -26,7 +24,7 @@ type Props = {
 };
 
 const DRAFT_KEY = "admin:draft";
-const MAX_IMAGE_SIZE = 2 * 1024 * 1024; // 2MB
+const MAX_IMAGE_SIZE = 2 * 1024 * 1024;
 
 export function AdminEditor({ initial, onSave, onCancel, showToast }: Props) {
   const isNew = !initial.slug;
@@ -51,7 +49,6 @@ export function AdminEditor({ initial, onSave, onCancel, showToast }: Props) {
     [initial.slug, title]
   );
 
-  // Khôi phục draft (chỉ cho bài mới)
   useEffect(() => {
     if (!isNew) {
       setDraftLoaded(true);
@@ -71,13 +68,12 @@ export function AdminEditor({ initial, onSave, onCancel, showToast }: Props) {
         showToast("Đã khôi phục bản nháp", "ok");
       }
     } catch {
-      localStorage.removeItem(DRAFT_KEY); // corrupted draft
+      localStorage.removeItem(DRAFT_KEY);
     } finally {
       setDraftLoaded(true);
     }
   }, []);
 
-  // Autosave draft (chỉ khi đã load draft và là bài mới)
   useEffect(() => {
     if (!isNew || !draftLoaded) return;
     const draft = { title, level, language, description, image, blocks, exercises };
@@ -85,7 +81,7 @@ export function AdminEditor({ initial, onSave, onCancel, showToast }: Props) {
   }, [title, level, language, description, image, blocks, exercises, isNew, draftLoaded]);
 
   const addBlock = () => {
-    setBlocks(prev => [...prev, { id: lessonsStore.newId(), code: "", explanation: "" }]);
+    setBlocks(prev => [...prev, { id: lessonsStore.newId, code: "", explanation: "" }]);
   };
 
   const confirmDelete = (type: "block" | "exercise", id: string) => {
@@ -136,7 +132,7 @@ export function AdminEditor({ initial, onSave, onCancel, showToast }: Props) {
       const prompts = await generateExercises(topic, 3, language);
       setExercises(prev => [
         ...prev,
-        ...prompts.map(p => ({ id: lessonsStore.newId(), prompt: p })),
+        ...prompts.map(p => ({ id: lessonsStore.newId, prompt: p })),
       ]);
       showToast("Đã thêm 3 bài tập mới!", "ok");
     } catch (e: any) {
@@ -178,7 +174,6 @@ export function AdminEditor({ initial, onSave, onCancel, showToast }: Props) {
 
   return (
     <div className="rounded-xl border border-border bg-card/80 p-6 backdrop-blur">
-      {/* Header buttons */}
       <div className="mb-6 flex items-center justify-between">
         <button onClick={onCancel} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
           <X className="h-4 w-4" /> Huỷ
@@ -188,7 +183,6 @@ export function AdminEditor({ initial, onSave, onCancel, showToast }: Props) {
         </button>
       </div>
 
-      {/* Meta fields */}
       <div className="grid gap-4 lg:grid-cols-3 mb-6">
         <div className="lg:col-span-2 space-y-3">
           <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Tiêu đề bài học" className="w-full rounded-md border border-border bg-card px-3 py-2 text-lg font-medium focus:border-primary focus:outline-none" />
@@ -225,7 +219,6 @@ export function AdminEditor({ initial, onSave, onCancel, showToast }: Props) {
         </div>
       </div>
 
-      {/* Blocks */}
       <div className="mb-8 rounded-xl border border-border bg-card p-5">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold">Đoạn code ({blocks.length})</h3>
@@ -261,7 +254,6 @@ export function AdminEditor({ initial, onSave, onCancel, showToast }: Props) {
         </div>
       </div>
 
-      {/* Exercises */}
       <div className="rounded-xl border border-border bg-card p-5">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold">Bài tập cuối bài ({exercises.length})</h3>
@@ -273,7 +265,7 @@ export function AdminEditor({ initial, onSave, onCancel, showToast }: Props) {
             >
               <Sparkles className="h-3 w-3" /> AI sinh 3 bài
             </button>
-            <button onClick={() => setExercises(prev => [...prev, { id: lessonsStore.newId(), prompt: "" }])} className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90">
+            <button onClick={() => setExercises(prev => [...prev, { id: lessonsStore.newId, prompt: "" }])} className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:opacity-90">
               <Plus className="h-3 w-3" /> Thêm bài
             </button>
           </div>
@@ -294,7 +286,6 @@ export function AdminEditor({ initial, onSave, onCancel, showToast }: Props) {
         </div>
       </div>
 
-      {/* Delete Modal (chung cho cả block và exercise) */}
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
           <div className="mx-4 w-full max-w-sm rounded-xl border border-border bg-card p-6 text-center">
@@ -318,4 +309,4 @@ export function AdminEditor({ initial, onSave, onCancel, showToast }: Props) {
       )}
     </div>
   );
-}
+                       }
