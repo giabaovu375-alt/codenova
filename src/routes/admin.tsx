@@ -1,4 +1,4 @@
-// routes/admin.tsx — Premium Admin (refactored)
+// routes/admin.tsx — Premium Admin (không dùng useToast, toast inline)
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -7,7 +7,6 @@ import {
 } from "lucide-react";
 import { CodeNovaLayout } from "@/components/CodeNovaLayout";
 import { AdminEditor } from "@/components/AdminEditor";
-import { useToast } from "@/hooks/useToast";
 import {
   lessonsStore,
   type Lesson,
@@ -66,7 +65,13 @@ function Admin() {
   const [search, setSearch] = useState("");
   const [langFilter, setLangFilter] = useState<LessonLanguage | "all">("all");
   const [levelFilter, setLevelFilter] = useState<string>("all");
-  const { show, ToastUI } = useToast();
+
+  // Toast đơn giản không cần hook riêng
+  const [toast, setToast] = useState<string | null>(null);
+  const show = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  };
 
   // Debounce search input
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -123,11 +128,11 @@ function Admin() {
   async function handleSave(lesson: Lesson) {
     try {
       await lessonsStore.upsert(lesson);
-      show("Đã lưu bài học thành công!", "ok");
+      show("Đã lưu bài học thành công!");
       setEditing(null);
       await refresh();
     } catch (err: any) {
-      show(err.message || "Lỗi khi lưu", "err");
+      show(err.message || "Lỗi khi lưu");
     }
   }
 
@@ -135,10 +140,10 @@ function Admin() {
     if (!confirm("Xoá vĩnh viễn bài học này?")) return;
     try {
       await lessonsStore.remove(slug);
-      show("Đã xoá bài học", "ok");
+      show("Đã xoá bài học");
       await refresh();
     } catch (err: any) {
-      show(err.message || "Lỗi khi xoá", "err");
+      show(err.message || "Lỗi khi xoá");
     }
   }
 
@@ -153,16 +158,22 @@ function Admin() {
     };
     try {
       await lessonsStore.upsert(clone);
-      show("Đã nhân bản bài học", "ok");
+      show("Đã nhân bản bài học");
       await refresh();
     } catch (err: any) {
-      show(err.message || "Lỗi khi nhân bản", "err");
+      show(err.message || "Lỗi khi nhân bản");
     }
   }
 
   return (
     <CodeNovaLayout>
-      {ToastUI}
+      {/* Toast inline */}
+      {toast && (
+        <div className="fixed bottom-5 right-5 z-50 rounded-xl bg-primary/90 px-4 py-3 text-sm text-primary-foreground shadow-lg">
+          {toast}
+        </div>
+      )}
+
       {!editing ? (
         <div>
           <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
