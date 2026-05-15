@@ -1,3 +1,4 @@
+// src/hooks/useToast.tsx
 import { useCallback, useRef, useState } from "react";
 import { CheckCircle, XCircle } from "lucide-react";
 
@@ -6,20 +7,13 @@ export function useToast() {
     msg: string;
     type: "ok" | "err";
   } | null>(null);
-
   const timeoutRef = useRef<number>();
 
   const show = useCallback(
     (msg: string, type: "ok" | "err" = "ok") => {
       setToast({ msg, type });
-
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-
-      timeoutRef.current = window.setTimeout(() => {
-        setToast(null);
-      }, 3000);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = window.setTimeout(() => setToast(null), 3000);
     },
     []
   );
@@ -37,10 +31,9 @@ export function useToast() {
       ) : (
         <XCircle className="h-4 w-4" />
       )}
-
       {toast.msg}
     </div>
   ) : null;
 
   return { show, ToastUI };
-        }
+}
