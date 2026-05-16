@@ -92,6 +92,42 @@ export type CodeSnippet = {
   explanation?: React.ReactNode;
 };
 
+function ExplanationCard({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="w-full overflow-hidden rounded-xl border border-border bg-card p-5 text-sm leading-relaxed text-muted-foreground shadow-sm">
+      {children}
+    </div>
+  );
+}
+
+function ChallengeCard({
+  label,
+  hint,
+  onStart,
+}: {
+  label: string;
+  hint: string;
+  onStart: () => void;
+}) {
+  return (
+    <div className="flex w-full flex-col items-start gap-3 rounded-xl border border-primary/30 bg-gradient-to-br from-primary/5 via-background to-background p-5 shadow-sm">
+      <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+        <Sparkles className="h-3.5 w-3.5" />
+        Checkpoint
+      </div>
+      <h3 className="text-lg font-semibold text-foreground">{label}</h3>
+      <p className="text-sm text-muted-foreground">{hint}</p>
+      <button
+        onClick={onStart}
+        className="mt-1 inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-all hover:opacity-90 active:scale-[0.98]"
+      >
+        Vào làm bài tập
+        <ArrowRight className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
+
 export function CodeLessonCarousel({
   snippets,
   challengeEvery = 3,
@@ -147,12 +183,18 @@ export function CodeLessonCarousel({
 
       {/* Current card */}
       {current?.kind === "code" ? (
-        <CodeBlock
-          code={current.snippet.code}
-          language={current.snippet.language}
-          title={current.snippet.title}
-          explanation={current.snippet.explanation}
-        />
+        current.snippet.code.trim() ? (
+          <CodeBlock
+            code={current.snippet.code}
+            language={current.snippet.language}
+            title={current.snippet.title}
+            explanation={current.snippet.explanation}
+          />
+        ) : (
+          <ExplanationCard>
+            {current.snippet.explanation || current.snippet.title || ""}
+          </ExplanationCard>
+        )
       ) : (
         <ChallengeCard
           label={challengeLabel}
@@ -187,35 +229,3 @@ export function CodeLessonCarousel({
     </div>
   );
 }
-
-/* ============================================================
- * ChallengeCard — card nổi bật, mời user vào làm bài tập
- * ============================================================ */
-function ChallengeCard({
-  label,
-  hint,
-  onStart,
-}: {
-  label: string;
-  hint: string;
-  onStart: () => void;
-}) {
-  return (
-    <div className="flex w-full flex-col items-start gap-3 rounded-xl border border-primary/30 bg-gradient-to-br from-primary/5 via-background to-background p-5 shadow-sm">
-      <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
-        <Sparkles className="h-3.5 w-3.5" />
-        Checkpoint
-      </div>
-      <h3 className="text-lg font-semibold text-foreground">{label}</h3>
-      <p className="text-sm text-muted-foreground">{hint}</p>
-      <button
-        onClick={onStart}
-        className="mt-1 inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-all hover:opacity-90 active:scale-[0.98]"
-      >
-        Vào làm bài tập
-        <ArrowRight className="h-4 w-4" />
-      </button>
-    </div>
-  );
-}
-
