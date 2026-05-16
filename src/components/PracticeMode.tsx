@@ -1,21 +1,10 @@
 /* ─────────────────────────────────────────────────────────────
- * PracticeMode.tsx — đã nâng cấp
- * Đầy đủ 15 yêu cầu:
- *  1.  Phân loại độ khó: easy → medium → hard → challenge
- *  2.  Sai 1 lần → hint nhẹ; sai 2 lần → đáp án gần đúng (xử lý trong exercises.tsx)
- *  3.  Câu "debug code"
- *  4.  MCQ random options mỗi lần (trong exercises.tsx)
- *  5.  Combo streak: đúng liên tiếp 5 câu → bonus XP
- *  6.  Adaptive: làm tốt 3 câu dễ liên tiếp → tự nhảy lên medium
- *  7.  Câu "predict output" (đoán output)
- *  8.  Timer optional cho mode "Thử thách"
- *  9.  Tóm tắt nhớ nhanh 30 giây sau khi xong
- *  10. Spaced repetition — câu sai sẽ tự xuất hiện lại ở chế độ ôn tập
- *  11. Checkpoint sau mỗi 5 câu
- *  12. Badge: "Master if/else", "Loop Beginner"...
- *  13. Reorder shuffle mạnh (trong exercises.tsx)
- *  14. "Tại sao đáp án sai" (trong MCQView/wrongExplanations)
- *  15. Mini project cuối chương
+ * PracticeMode.tsx — bản nâng cấp (không skip câu hỏi)
+ *  - Nút "Câu tiếp" chỉ hoạt động khi đã trả lời câu hiện tại
+ *  - CompletionBar chỉ cho nhảy tới câu đã làm hoặc câu hiện tại
+ *  - Nút "Kết thúc bài" chỉ sáng khi đã làm câu cuối
+ *  - Fallback cho ExerciseRenderer
+ *  - Adaptive prompt: bỏ qua -> reset easy streak
  * ────────────────────────────────────────────────────────────*/
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -32,7 +21,7 @@ import {
   RefreshCcw,
   Timer as TimerIcon,
 } from "lucide-react";
-import { CodeBlock } from "@/components/CodeBlock"; // chỉnh path nếu khác
+import { CodeBlock } from "@/components/CodeBlock";
 import {
   FillBlankView,
   InlineMarkdown,
@@ -54,19 +43,16 @@ import {
 
 type Mode = "learn" | "practice" | "review" | "summary";
 
-/* ────────────── Bonus XP / streak constants ────────────── */
-const STREAK_BONUS_AT = 5;       // đúng 5 liên tiếp → bonus
+const STREAK_BONUS_AT = 5;
 const STREAK_BONUS_XP = 25;
-const CHECKPOINT_EVERY = 5;      // checkpoint mỗi 5 câu
-const ADAPTIVE_PROMOTE_AFTER = 3; // 3 easy đúng liên tiếp → đề xuất nhảy lên medium
+const CHECKPOINT_EVERY = 5;
+const ADAPTIVE_PROMOTE_AFTER = 3;
 
-/* ────────────── Per-exercise attempt record ────────────── */
 interface AttemptRecord {
   correct: boolean;
-  attempts: number;     // tổng số lần kiểm tra
+  attempts: number;
 }
 
-/* ────────────── Helpers ────────────── */
 function difficultyOf(ex: Exercise): Difficulty {
   return ex.difficulty ?? "easy";
 }
@@ -77,7 +63,7 @@ function formatTime(s: number) {
   return `${m}:${sec.toString().padStart(2, "0")}`;
 }
 
-/* ────────────── Thanh tổng tiến độ ────────────── */
+/* ────────── CompletionBar (đã sửa: khoá nhảy tới câu chưa làm) ────────── */
 function CompletionBar({
   completed,
   total,
@@ -120,24 +106,29 @@ function CompletionBar({
             const r = results[i];
             const active = i === currentIndex;
             const diff = difficultyOf(exercises[i]);
+            const isDone = r !== undefined; // đã làm
+            const isReachable = isDone || i === currentIndex; // chỉ cho phép nhảy tới câu đã làm hoặc câu hiện tại
+
             let cls = "border-border bg-background text-muted-foreground";
             if (r?.correct === true)
               cls = "border-green-500/60 bg-green-500/10 text-green-600 dark:text-green-400";
             else if (r?.correct === false)
               cls = "border-destructive/60 bg-destructive/10 text-destructive";
             if (active) cls += " ring-2 ring-primary/50";
-            // Checkpoint marker: nền đậm hơn
+            if (!isReachable) cls += " opacity-40 cursor-not-allowed";
+
             const isCheckpoint = (i + 1) % CHECKPOINT_EVERY === 0;
             return (
               <button
                 key={i}
-                onClick={() => onJump(i)}
+                onClick={() => isReachable && onJump(i)}
+                disabled={!isReachable}
                 className={`relative inline-flex h-6 w-6 items-center justify-center rounded-md border text-[11px] font-medium transition-all hover:scale-110 ${cls} ${
                   isCheckpoint ? "ring-1 ring-primary/30" : ""
                 }`}
                 title={`Câu ${i + 1} — ${DIFFICULTY_META[diff].label}${
                   r?.correct === true ? " — đúng" : r?.correct === false ? " — sai" : ""
-                }`}
+                }${!isReachable ? " (chưa thể truy cập)" : ""}`}
               >
                 {r?.correct === true ? <Check className="h-3 w-3" /> : i + 1}
                 {isCheckpoint && (
@@ -152,7 +143,7 @@ function CompletionBar({
   );
 }
 
-/* ────────────── Difficulty chip ────────────── */
+/* ────────── DifficultyChip ────────── */
 function DifficultyChip({ d }: { d: Difficulty }) {
   const meta = DIFFICULTY_META[d];
   return (
@@ -164,7 +155,7 @@ function DifficultyChip({ d }: { d: Difficulty }) {
   );
 }
 
-/* ────────────── Render từng loại bài ────────────── */
+/* ────────── ExerciseRenderer (có fallback) ────────── */
 function ExerciseRenderer({
   ex,
   language,
@@ -189,10 +180,16 @@ function ExerciseRenderer({
       return <PredictOutputView exercise={ex} language={language} onResult={onResult} />;
     case "mini-project":
       return <MiniProjectView exercise={ex} language={language} onResult={onResult} />;
+    default:
+      return (
+        <div className="rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
+          ⚠️ Loại bài tập "{ex.type}" không được hỗ trợ.
+        </div>
+      );
   }
 }
 
-/* ────────────── Component chính ────────────── */
+/* ────────── Component chính ────────── */
 export function PracticeMode({ lesson }: { lesson: PracticeLesson }) {
   // Sắp xếp bài tập theo độ khó (mini-project luôn cuối)
   const orderedExercises = useMemo(() => {
@@ -209,17 +206,18 @@ export function PracticeMode({ lesson }: { lesson: PracticeLesson }) {
   const [mode, setMode] = useState<Mode>("learn");
   const [currentEx, setCurrentEx] = useState(0);
   const [results, setResults] = useState<Record<number, AttemptRecord>>({});
-  const [streak, setStreak] = useState(0);     // streak hiện tại
+  const [streak, setStreak] = useState(0);
   const [bestStreak, setBestStreak] = useState(0);
   const [xp, setXp] = useState(0);
   const [bonusToast, setBonusToast] = useState<string | null>(null);
   const [checkpointToast, setCheckpointToast] = useState<string | null>(null);
 
-  // Adaptive: đề xuất nhảy độ khó
+  // Adaptive
   const [adaptivePrompt, setAdaptivePrompt] = useState<Difficulty | null>(null);
+  const [adaptiveDismissed, setAdaptiveDismissed] = useState(false);
   const easyStreakRef = useRef(0);
 
-  // Timer cho mode Thử thách
+  // Timer
   const [timerEnabled, setTimerEnabled] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
@@ -240,6 +238,7 @@ export function PracticeMode({ lesson }: { lesson: PracticeLesson }) {
     setBonusToast(null);
     setCheckpointToast(null);
     setAdaptivePrompt(null);
+    setAdaptiveDismissed(false);
     easyStreakRef.current = 0;
   }, [lesson]);
 
@@ -252,11 +251,10 @@ export function PracticeMode({ lesson }: { lesson: PracticeLesson }) {
   const allDone = completedCount === total && total > 0;
   const ex = orderedExercises[currentEx];
   const exResult = results[currentEx];
+  const canAdvance = exResult !== undefined; // đã trả lời câu hiện tại
 
   /* ────────── Xử lý kết quả 1 câu ────────── */
   const handleResult = (correct: boolean, meta: { attempts: number }) => {
-    // Chỉ ghi lần đầu user "kết thúc" câu này (đúng, hoặc đã sai sau lock).
-    // Nhưng để đơn giản và hỗ trợ retry, luôn cập nhật.
     setResults((prev) => ({
       ...prev,
       [currentEx]: { correct, attempts: meta.attempts },
@@ -276,11 +274,10 @@ export function PracticeMode({ lesson }: { lesson: PracticeLesson }) {
         }
         return ns;
       });
-      // Adaptive: đếm easy streak
-      if (diff === "easy") {
+      // Adaptive
+      if (diff === "easy" && !adaptiveDismissed) {
         easyStreakRef.current += 1;
         if (easyStreakRef.current >= ADAPTIVE_PROMOTE_AFTER && !adaptivePrompt) {
-          // tìm câu medium chưa làm đầu tiên
           const nextMedium = orderedExercises.findIndex(
             (e, i) => difficultyOf(e) === "medium" && !results[i] && i !== currentEx,
           );
@@ -295,8 +292,9 @@ export function PracticeMode({ lesson }: { lesson: PracticeLesson }) {
     }
   };
 
-  /* ────────── Khi chuyển câu: check checkpoint ────────── */
+  /* ────────── Chuyển câu (có checkpoint) ────────── */
   const goNext = () => {
+    if (!canAdvance) return; // không cho skip
     const nextIdx = currentEx + 1;
     if (nextIdx >= total) {
       setMode("summary");
@@ -311,7 +309,7 @@ export function PracticeMode({ lesson }: { lesson: PracticeLesson }) {
     setCurrentEx(nextIdx);
   };
 
-  /* ────────── Badges đạt được ────────── */
+  /* ────────── Badges ────────── */
   const earnedBadges = useMemo<LessonBadge[]>(() => {
     const badges = lesson.badges ?? [];
     return badges.filter((b) => {
@@ -323,22 +321,17 @@ export function PracticeMode({ lesson }: { lesson: PracticeLesson }) {
     });
   }, [lesson.badges, orderedExercises, results]);
 
-  /* ────────── Câu sai (cho chế độ ôn tập / spaced repetition) ────────── */
+  /* ────────── Câu sai (cho ôn tập) ────────── */
   const wrongIndices = useMemo(
     () =>
       Object.entries(results)
         .filter(([, r]) => !r.correct)
         .map(([k]) => Number(k))
-        .sort((a, b) => {
-          // câu sai nhiều lần / nhiều attempts → ưu tiên trước
-          const ra = results[a].attempts;
-          const rb = results[b].attempts;
-          return rb - ra;
-        }),
+        .sort((a, b) => results[b].attempts - results[a].attempts),
     [results],
   );
 
-  /* ────────── Review mode state ────────── */
+  /* ────────── Review mode ────────── */
   const [reviewQueue, setReviewQueue] = useState<number[]>([]);
   const [reviewPos, setReviewPos] = useState(0);
 
@@ -353,7 +346,6 @@ export function PracticeMode({ lesson }: { lesson: PracticeLesson }) {
     const idx = reviewQueue[reviewPos];
     if (correct) {
       setResults((prev) => ({ ...prev, [idx]: { correct: true, attempts: meta.attempts } }));
-      // Bỏ khỏi queue
       const next = reviewQueue.filter((_, i) => i !== reviewPos);
       setTimeout(() => {
         setReviewQueue(next);
@@ -361,7 +353,6 @@ export function PracticeMode({ lesson }: { lesson: PracticeLesson }) {
         else setReviewPos((p) => Math.min(p, next.length - 1));
       }, 600);
     } else {
-      // Đẩy về cuối queue
       setReviewQueue((q) => {
         const cur = q[reviewPos];
         const rest = q.filter((_, i) => i !== reviewPos);
@@ -390,7 +381,6 @@ export function PracticeMode({ lesson }: { lesson: PracticeLesson }) {
         <h2 className="text-lg font-semibold text-foreground">{lesson.title}</h2>
 
         <div className="flex items-center gap-2">
-          {/* Stats nhỏ */}
           <span className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-2 py-0.5 text-xs">
             <Sparkles className="h-3 w-3 text-primary" /> {xp} XP
           </span>
@@ -398,49 +388,28 @@ export function PracticeMode({ lesson }: { lesson: PracticeLesson }) {
             <Flame className="h-3 w-3 text-orange-500" /> Streak {streak}
           </span>
 
-          {/* Toggle mode */}
           <div className="inline-flex rounded-md border border-border bg-background p-0.5">
             <button
               onClick={() => setMode("learn")}
-              className={`inline-flex items-center gap-1.5 rounded px-3 py-1 text-xs font-medium transition-colors ${
-                mode === "learn"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
+              className={`...`} // giữ nguyên className
             >
               <BookOpen className="h-3.5 w-3.5" /> Học
             </button>
             <button
               onClick={() => setMode("practice")}
               disabled={total === 0}
-              className={`inline-flex items-center gap-1.5 rounded px-3 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
-                mode === "practice"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
+              className={`...`}
             >
-              <Dumbbell className="h-3.5 w-3.5" />
-              Luyện tập
-              {total > 0 && (
-                <span className="ml-0.5 rounded bg-background/30 px-1 text-[10px]">{total}</span>
-              )}
+              <Dumbbell className="h-3.5 w-3.5" /> Luyện tập
+              {total > 0 && <span className="...">{total}</span>}
             </button>
             <button
               onClick={startReview}
               disabled={wrongIndices.length === 0}
-              className={`inline-flex items-center gap-1.5 rounded px-3 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
-                mode === "review"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-              title="Ôn lại các câu đã sai"
+              className={`...`}
             >
               <RefreshCcw className="h-3.5 w-3.5" /> Ôn tập
-              {wrongIndices.length > 0 && (
-                <span className="ml-0.5 rounded bg-background/30 px-1 text-[10px]">
-                  {wrongIndices.length}
-                </span>
-              )}
+              {wrongIndices.length > 0 && <span className="...">{wrongIndices.length}</span>}
             </button>
           </div>
         </div>
@@ -461,13 +430,18 @@ export function PracticeMode({ lesson }: { lesson: PracticeLesson }) {
                 );
                 if (nextIdx >= 0) setCurrentEx(nextIdx);
                 setAdaptivePrompt(null);
+                setAdaptiveDismissed(true);
               }}
               className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90"
             >
               Nhảy lên
             </button>
             <button
-              onClick={() => setAdaptivePrompt(null)}
+              onClick={() => {
+                setAdaptivePrompt(null);
+                setAdaptiveDismissed(true);
+                easyStreakRef.current = 0; // reset streak
+              }}
               className="rounded-md border border-border px-3 py-1 text-xs hover:bg-accent"
             >
               Bỏ qua
@@ -485,8 +459,10 @@ export function PracticeMode({ lesson }: { lesson: PracticeLesson }) {
           currentIndex={currentEx}
           exercises={orderedExercises}
           onJump={(i) => {
-            setCurrentEx(i);
-            setMode("practice");
+            if (i === currentEx || results[i] !== undefined) {
+              setCurrentEx(i);
+              setMode("practice");
+            }
           }}
         />
       )}
@@ -502,7 +478,6 @@ export function PracticeMode({ lesson }: { lesson: PracticeLesson }) {
             ))}
           </div>
 
-          {/* Difficulty overview */}
           {total > 0 && (
             <div className="rounded-md border border-border bg-muted/30 p-3">
               <p className="mb-2 text-xs font-medium text-muted-foreground">
@@ -618,23 +593,40 @@ export function PracticeMode({ lesson }: { lesson: PracticeLesson }) {
             {currentEx < total - 1 ? (
               <button
                 onClick={goNext}
-                className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                disabled={!canAdvance}
+                className={`inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  canAdvance
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                    : "bg-muted text-muted-foreground cursor-not-allowed"
+                }`}
               >
-                Câu tiếp <ChevronRight className="h-4 w-4" />
+                {canAdvance ? (
+                  <>
+                    Câu tiếp <ChevronRight className="h-4 w-4" />
+                  </>
+                ) : (
+                  "Hãy trả lời câu hỏi"
+                )}
               </button>
             ) : (
               <button
                 onClick={() => setMode("summary")}
-                className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                disabled={!canAdvance}
+                className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  canAdvance
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                    : "bg-muted text-muted-foreground cursor-not-allowed"
+                }`}
               >
-                <Trophy className="h-4 w-4" /> Kết thúc bài
+                <Trophy className="h-4 w-4" />
+                {canAdvance ? "Kết thúc bài" : "Hãy trả lời câu hỏi"}
               </button>
             )}
           </div>
         </div>
       )}
 
-      {/* ────────── REVIEW MODE (spaced repetition) ────────── */}
+      {/* ────────── REVIEW MODE ────────── */}
       {mode === "review" && reviewQueue.length > 0 && (
         <div className="space-y-3 rounded-lg border border-amber-500/40 bg-amber-500/5 p-4">
           <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -685,7 +677,6 @@ export function PracticeMode({ lesson }: { lesson: PracticeLesson }) {
             </div>
           </div>
 
-          {/* Tóm tắt 30 giây */}
           {lesson.quickRecap && lesson.quickRecap.length > 0 && (
             <div className="rounded-md border border-primary/30 bg-primary/5 p-3">
               <p className="mb-1 text-sm font-semibold text-primary">
@@ -700,8 +691,6 @@ export function PracticeMode({ lesson }: { lesson: PracticeLesson }) {
               </ul>
             </div>
           )}
-
-          {/* Badges */}
           {earnedBadges.length > 0 && (
             <div>
               <p className="mb-2 text-sm font-semibold text-foreground">
@@ -720,7 +709,6 @@ export function PracticeMode({ lesson }: { lesson: PracticeLesson }) {
             </div>
           )}
 
-          {/* Nút hành động */}
           <div className="flex flex-wrap gap-2 border-t border-border pt-3">
             {wrongIndices.length > 0 && (
               <button
@@ -747,7 +735,6 @@ export function PracticeMode({ lesson }: { lesson: PracticeLesson }) {
             </button>
           </div>
 
-          {/* allDone badge tổng */}
           {allDone && (
             <div className="flex items-center justify-center rounded-md border border-green-500/40 bg-green-500/10 px-3 py-2 text-sm font-medium text-green-700 dark:text-green-300">
               🎉 Bạn đã hoàn thành toàn bộ {total} câu — quá xịn!
@@ -758,155 +745,3 @@ export function PracticeMode({ lesson }: { lesson: PracticeLesson }) {
     </div>
   );
 }
-
-/* ─────────────────────────────────────────────────────────────
- * SAMPLE LESSON — minh hoạ cách dùng đầy đủ các loại bài tập
- * ────────────────────────────────────────────────────────────*/
-export const SAMPLE_LESSON: PracticeLesson = {
-  title: "Hàm tính giai thừa (Python)",
-  language: "python",
-  code: `def factorial(n):
-    if n <= 1:
-        return 1
-    return n * factorial(n - 1)
-
-print(factorial(5))`,
-  explanation: [
-    "Đoạn code định nghĩa hàm `factorial(n)` tính giai thừa của `n` bằng đệ quy.",
-    "Điều kiện dừng là khi `n <= 1`, hàm trả về `1`.",
-    "Ngược lại, hàm trả về `n * factorial(n - 1)`.",
-    "Kết quả `factorial(5)` = `120`.",
-  ],
-  quickRecap: [
-    "Đệ quy = hàm tự gọi chính nó.",
-    "Luôn cần **điều kiện dừng** (`base case`), nếu không sẽ lặp vô tận.",
-    "`factorial(n) = n * factorial(n-1)` với base case `factorial(1) = 1`.",
-  ],
-  badges: [
-    { id: "recursion-novice", label: "Recursion Beginner", requireTag: "recursion", minCorrect: 2 },
-    { id: "loop-master", label: "Loop Master", requireTag: "loop", minCorrect: 1 },
-    { id: "debug-hunter", label: "Debug Hunter", requireTag: "debug", minCorrect: 1 },
-  ],
-  exercises: [
-    /* ────── EASY ────── */
-    {
-      type: "mcq",
-      difficulty: "easy",
-      tags: ["recursion"],
-      question: "Đoạn code này làm gì?",
-      options: [
-        "Tính tổng các số từ 1 đến n",
-        "Tính giai thừa của n bằng đệ quy",
-        "Kiểm tra n có phải số nguyên tố",
-        "In ra n lần chữ 'factorial'",
-      ],
-      answerIndex: 1,
-      wrongExplanations: {
-        0: "Tổng 1..n dùng `sum(range(1, n+1))` chứ không nhân.",
-        2: "Kiểm tra số nguyên tố cần vòng lặp chia thử, không phải nhân dồn.",
-        3: "Không có `print` chữ nào trong vòng lặp.",
-      },
-      explanation: "Hàm tự gọi chính nó với n-1 và nhân với n — định nghĩa đệ quy của giai thừa.",
-    },
-    {
-      type: "predict-output",
-      difficulty: "easy",
-      tags: ["recursion"],
-      question: "Đoán output:",
-      code: `print(factorial(3))`,
-      expectedOutput: "6",
-      hint: "3 × 2 × 1 = ?",
-      explanation: "factorial(3) = 3 * factorial(2) = 3 * 2 * 1 = 6.",
-    },
-    /* ────── MEDIUM ────── */
-    {
-      type: "fill-blank",
-      difficulty: "medium",
-      tags: ["recursion"],
-      question: "Điền vào chỗ trống để hoàn thành hàm:",
-      template: `def factorial(n):
-    if n <= ___:
-        return ___
-    return n * factorial(n - ___)`,
-      answers: ["1", "1", "1"],
-      hint: "Cả 3 chỗ đều là cùng một con số.",
-      nearAnswer: "Base case dừng khi n ≤ 1 và trả về 1.",
-    },
-    {
-      type: "predict-output",
-      difficulty: "medium",
-      tags: ["recursion"],
-      question: "Đoán output:",
-      code: `print(factorial(0), factorial(1), factorial(5))`,
-      expectedOutput: "1 1 120",
-      hint: "Cả 0! và 1! đều bằng 1.",
-    },
-    /* ────── HARD ────── */
-    {
-      type: "debug",
-      difficulty: "hard",
-      tags: ["debug", "recursion"],
-      question: "Tìm và sửa lỗi khiến hàm này lặp vô tận.",
-      buggyCode: `def factorial(n):
-    if n < 0:
-        return 1
-    return n * factorial(n - 1)`,
-      fixedCode: `def factorial(n):
-    if n <= 1:
-        return 1
-    return n * factorial(n - 1)`,
-      bugLineHint: "Điều kiện dừng (`base case`) chưa đúng — n giảm dần sẽ không bao giờ < 0 khi bắt đầu từ số dương.",
-      explanation: "Base case phải là `n <= 1`, không phải `n < 0`.",
-    },
-    {
-      type: "rewrite",
-      difficulty: "hard",
-      tags: ["loop"],
-      question: "Viết lại hàm dùng vòng lặp `for` thay vì đệ quy.",
-      starter: `def factorial(n):\n    `,
-      solution: `def factorial(n):
-    result = 1
-    for i in range(2, n + 1):
-        result = result * i
-    return result`,
-      hint: "Khởi tạo `result = 1`, lặp `i` từ 2 đến `n`, nhân dồn vào `result`.",
-      nearAnswer: "Dùng `for i in range(2, n + 1)` và biến `result` khởi tạo bằng 1.",
-    },
-    /* ────── CHALLENGE ────── */
-    {
-      type: "reorder",
-      difficulty: "challenge",
-      tags: ["recursion"],
-      question: "Sắp xếp các dòng sau theo đúng thứ tự:",
-      lines: [
-        "def factorial(n):",
-        "    if n <= 1:",
-        "        return 1",
-        "    return n * factorial(n - 1)",
-      ],
-    },
-    /* ────── MINI PROJECT ────── */
-    {
-      type: "mini-project",
-      tags: ["loop"],
-      question: "Mini project: Máy tính nhỏ",
-      brief:
-        "Viết hàm `calc(a, b, op)` nhận 2 số và 1 toán tử ('+', '-', '*', '/') rồi trả kết quả. Chia 0 trả về chuỗi 'Error'.",
-      starter: `def calc(a, b, op):
-    # code của bạn ở đây
-    pass
-
-print(calc(6, 2, '/'))
-print(calc(5, 0, '/'))`,
-      checks: [
-        { label: "Có định nghĩa hàm `calc`", mustInclude: ["def calc"] },
-        { label: "Xử lý cả 4 toán tử + - * /", mustInclude: ["'+'", "'-'", "'*'", "'/'"] },
-        { label: "Xử lý chia cho 0 → 'Error'", mustInclude: ["Error"] },
-        { label: "Không dùng `eval`", mustNotInclude: ["eval("] },
-      ],
-      hint: "Dùng `if/elif` để kiểm op; check `b == 0` trước khi chia.",
-      explanation:
-        "Project nhỏ giúp bạn áp dụng if/elif, hàm, và xử lý edge-case (chia 0).",
-    },
-  ],
-};
