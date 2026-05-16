@@ -67,13 +67,19 @@ export const PROVIDERS: ProviderInfo[] = [
   },
   {
     id: "groq",
-    name: "Groq (Llama 3.3 70B, Mixtral)",
-    description: "Cực nhanh, miễn phí. Tốt cho code cơ bản.",
-    signupUrl: "https://console.groq.com/keys",
-    models: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"],
-    defaultModel: "llama-3.3-70b-versatile",
-    tier: "fast",
-    apiFormat: "openai",
+name: "Groq (Llama 3.3 70B, Mixtral)",
+description: "Cực nhanh, miễn phí. Tốt cho code cơ bản.",
+signupUrl: "https://console.groq.com/keys",
+models: [
+  "llama-3.3-70b-versatile",
+  "llama-3.1-8b-instant",
+  "mixtral-8x7b-32768"
+],
+defaultModel: "llama-3.3-70b-versatile",
+tier: "fast",
+apiFormat: "openai",
+
+baseUrl: "https://api.groq.com/openai/v1",
   },
   {
     id: "openrouter",
