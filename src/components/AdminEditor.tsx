@@ -1,10 +1,18 @@
-// components/AdminEditor.tsx — Premium Editor v2 (Fixed newId)
+// components/AdminEditor.tsx — Premium Editor v2 (with Practice exercises)
 import { useEffect, useMemo, useState } from "react";
 import {
   Plus, Trash2, Image as ImageIcon, Sparkles, Save, X,
   AlertTriangle, Loader2
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
+import {
+  fetchPracticeExercises,
+  savePracticeExercise,
+  deletePracticeExercise,
+  upsertPracticeLesson,
+  removePracticeLesson,
+  type PracticeExerciseRow,
+} from "@/lib/practice-admin-store";
 import {
   lessonsStore,
   type Lesson,
@@ -37,9 +45,13 @@ export function AdminEditor({ initial, onSave, onCancel, showToast }: Props) {
   const [blocks, setBlocks] = useState<CB[]>(initial.blocks.length ? initial.blocks : []);
   const [exercises, setExercises] = useState<Exercise[]>(initial.exercises || []);
   const [deleteTarget, setDeleteTarget] = useState<{
-    type: "block" | "exercise";
+    type: "block" | "exercise" | "practice_exercise";
     id: string;
+    practiceIndex?: number;
   } | null>(null);
+
+  // Practice exercises state
+  const [practiceExercises, setPracticeExercises] = useState<PracticeExerciseRow[]>([]);
 
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
@@ -49,6 +61,7 @@ export function AdminEditor({ initial, onSave, onCancel, showToast }: Props) {
     [initial.slug, title]
   );
 
+  // Khôi phục draft (chỉ cho bài mới)
   useEffect(() => {
     if (!isNew) {
       setDraftLoaded(true);
@@ -74,6 +87,18 @@ export function AdminEditor({ initial, onSave, onCancel, showToast }: Props) {
     }
   }, []);
 
+  // Fetch practice exercises khi sửa bài cũ
+  useEffect(() => {
+    if (initial.slug) {
+      fetchPracticeExercises(initial.slug)
+        .then(setPracticeExercises)
+        .catch(() => setPracticeExercises([]));
+    } else {
+      setPracticeExercises([]);
+    }
+  }, [initial.slug]);
+
+  // Autosave draft (chỉ khi đã load draft và là bài mới)
   useEffect(() => {
     if (!isNew || !draftLoaded) return;
     const draft = { title, level, language, description, image, blocks, exercises };
@@ -84,6 +109,57 @@ export function AdminEditor({ initial, onSave, onCancel, showToast }: Props) {
     setBlocks(prev => [...prev, { id: lessonsStore.newId, code: "", explanation: "" }]);
   };
 
+  // ============ Practice exercises helpers ============
+  const addPracticeExercise = (type: PracticeExerciseRow["type"]) => {
+    const newEx: PracticeExerciseRow = {
+      lesson_slug: slug,
+      type,
+      question: "",
+      order_index: practiceExercises.length,
+    };
+    switch (type) {
+      case "mcq":
+        newEx.options = ["", "", "", ""];
+        newEx.answer_index = 0;
+        break;
+      case "fill-blank":
+        newEx.template = "";
+        newEx.answers = [""];
+        break;
+      case "rewrite":
+        newEx.starter = "";
+        newEx.solution = "";
+        break;
+      case "reorder":
+        newEx.lines = ["", ""];
+        break;
+    }
+    setPracticeExercises(prev => [...prev, newEx]);
+  };
+
+  const updatePracticeExercise = (index: number, field: string, value: any) => {
+    setPracticeExercises(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  };
+
+  const confirmDeletePractice = (index: number) => {
+    setDeleteTarget({ type: "practice_exercise", id: String(index), practiceIndex: index });
+  };
+
+  const handleDeletePractice = () => {
+    if (!deleteTarget || deleteTarget.type !== "practice_exercise" || deleteTarget.practiceIndex === undefined) return;
+    const idx = deleteTarget.practiceIndex;
+    const ex = practiceExercises[idx];
+    if (ex.id) {
+      deletePracticeExercise(ex.id).catch(() => {});
+    }
+    setPracticeExercises(prev => prev.filter((_, i) => i !== idx));
+    setDeleteTarget(null);
+  };
+
   const confirmDelete = (type: "block" | "exercise", id: string) => {
     setDeleteTarget({ type, id });
   };
@@ -92,8 +168,10 @@ export function AdminEditor({ initial, onSave, onCancel, showToast }: Props) {
     if (!deleteTarget) return;
     if (deleteTarget.type === "block") {
       setBlocks(prev => prev.filter(b => b.id !== deleteTarget.id));
-    } else {
+    } else if (deleteTarget.type === "exercise") {
       setExercises(prev => prev.filter(e => e.id !== deleteTarget.id));
+    } else if (deleteTarget.type === "practice_exercise") {
+      handleDeletePractice();
     }
     setDeleteTarget(null);
   };
@@ -168,6 +246,30 @@ export function AdminEditor({ initial, onSave, onCancel, showToast }: Props) {
       exercises: exercises.filter(e => e.prompt.trim()),
       createdAt: initial.createdAt || Date.now(),
     };
+
+    // Lưu practice lesson nếu có bài tập tương tác
+    if (practiceExercises.length > 0) {
+      try {
+        await upsertPracticeLesson(slug, title.trim(), language);
+        for (const ex of practiceExercises) {
+          await savePracticeExercise({ ...ex, lesson_slug: slug });
+        }
+      } catch (e: any) {
+        showToast("Lỗi lưu bài tập tương tác: " + (e.message || "không rõ"), "err");
+        return;
+      }
+    } else {
+      // Nếu không có bài tập nào thì xóa practice lesson (nếu có)
+      try {
+        await removePracticeLesson(slug);
+        // Xóa tất cả practice exercises cũ (nếu có)
+        const existing = await fetchPracticeExercises(slug);
+        for (const ex of existing) {
+          if (ex.id) await deletePracticeExercise(ex.id);
+        }
+      } catch {}
+    }
+
     await onSave(lesson);
     localStorage.removeItem(DRAFT_KEY);
   };
@@ -183,6 +285,7 @@ export function AdminEditor({ initial, onSave, onCancel, showToast }: Props) {
         </button>
       </div>
 
+      {/* Meta fields */}
       <div className="grid gap-4 lg:grid-cols-3 mb-6">
         <div className="lg:col-span-2 space-y-3">
           <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Tiêu đề bài học" className="w-full rounded-md border border-border bg-card px-3 py-2 text-lg font-medium focus:border-primary focus:outline-none" />
@@ -219,6 +322,7 @@ export function AdminEditor({ initial, onSave, onCancel, showToast }: Props) {
         </div>
       </div>
 
+      {/* Blocks */}
       <div className="mb-8 rounded-xl border border-border bg-card p-5">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold">Đoạn code ({blocks.length})</h3>
@@ -254,6 +358,7 @@ export function AdminEditor({ initial, onSave, onCancel, showToast }: Props) {
         </div>
       </div>
 
+      {/* Exercises (bài tập cuối bài - prompt string) */}
       <div className="rounded-xl border border-border bg-card p-5">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold">Bài tập cuối bài ({exercises.length})</h3>
@@ -286,27 +391,201 @@ export function AdminEditor({ initial, onSave, onCancel, showToast }: Props) {
         </div>
       </div>
 
-      {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-          <div className="mx-4 w-full max-w-sm rounded-xl border border-border bg-card p-6 text-center">
-            <AlertTriangle className="mx-auto h-8 w-8 text-destructive/70" />
-            <h3 className="mt-3 font-semibold">Xác nhận xoá</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {deleteTarget.type === "block" ? "Xoá đoạn code này?" : "Xoá bài tập này?"} Hành động không thể hoàn tác.
-            </p>
-            <div className="mt-4 flex justify-center gap-2">
-              <button onClick={() => setDeleteTarget(null)} className="rounded-md border border-border px-4 py-2 text-sm">Huỷ</button>
-              <button onClick={handleDelete} className="rounded-md bg-destructive px-4 py-2 text-sm text-destructive-foreground">Xoá</button>
-            </div>
+      {/* Practice Exercises Section */}
+      <div className="rounded-xl border border-border bg-card p-5 mt-8">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold">Bài tập tương tác (Practice) ({practiceExercises.length})</h3>
+          <div className="flex flex-wrap gap-2">
+            {(["mcq", "fill-blank", "rewrite", "reorder"] as PracticeExerciseRow["type"][]).map(type => (
+              <button
+                key={type}
+                onClick={() => addPracticeExercise(type)}
+                className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-3 py-1.5 text-xs hover:border-primary hover:text-primary"
+              >
+                + {type === "mcq" ? "MCQ" : type === "fill-blank" ? "Fill-blank" : type === "rewrite" ? "Rewrite" : "Reorder"}
+              </button>
+            ))}
           </div>
         </div>
-      )}
-
-      {!hasAnyKey() && (
-        <p className="mt-4 rounded-md border border-border bg-secondary/40 p-3 text-xs text-muted-foreground">
-          Chưa có API key. <Link to="/settings" className="text-primary hover:underline">Thêm key ở Cài đặt</Link> để dùng các tính năng AI.
-        </p>
-      )}
+        <div className="space-y-4">
+          {practiceExercises.map((ex, i) => (
+            <div key={i} className="rounded-md border border-border bg-card p-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-medium">Bài {i + 1} - {ex.type.toUpperCase()}</span>
+                <button onClick={() => confirmDeletePractice(i)} className="text-destructive hover:underline text-xs">Xóa</button>
+              </div>
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  placeholder="Câu hỏi"
+                  value={ex.question}
+                  onChange={e => updatePracticeExercise(i, "question", e.target.value)}
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                />
+                {ex.type === "mcq" && (
+                  <div className="space-y-2">
+                    {ex.options?.map((opt, optIdx) => (
+                      <div key={optIdx} className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name={`mcq_answer_${i}`}
+                          checked={ex.answer_index === optIdx}
+                          onChange={() => updatePracticeExercise(i, "answer_index", optIdx)}
+                        />
+                        <input
+                          type="text"
+                          placeholder={`Lựa chọn ${optIdx + 1}`}
+                          value={opt}
+                          onChange={e => {
+                            const newOptions = [...(ex.options ?? [])];
+                            newOptions[optIdx] = e.target.value;
+                            updatePracticeExercise(i, "options", newOptions);
+                          }}
+                          className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm"
+                        />
+                        <button
+                          onClick={() => {
+                            const newOptions = (ex.options ?? []).filter((_, oi) => oi !== optIdx);
+                            updatePracticeExercise(i, "options", newOptions);
+                            if (ex.answer_index === optIdx) updatePracticeExercise(i, "answer_index", 0);
+                          }}
+                          className="text-muted-foreground hover:text-destructive"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                    onClick={() => updatePracticeExercise(i, "options", [...(ex.options ?? []), ""])}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    + Thêm lựa chọn
+                  </button>
+                </div>
+              )}
+              {ex.type === "fill-blank" && (
+                <>
+                  <textarea
+                    placeholder="Template (dùng ___ cho chỗ trống)"
+                    value={ex.template ?? ""}
+                    onChange={e => updatePracticeExercise(i, "template", e.target.value)}
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono"
+                    rows={3}
+                  />
+                  {ex.answers?.map((ans, ansIdx) => (
+                    <div key={ansIdx} className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">Đáp án {ansIdx + 1}:</span>
+                      <input
+                        type="text"
+                        value={ans}
+                        onChange={e => {
+                          const newAnswers = [...(ex.answers ?? [])];
+                          newAnswers[ansIdx] = e.target.value;
+                          updatePracticeExercise(i, "answers", newAnswers);
+                        }}
+                        className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm"
+                      />
+                    </div>
+                  ))}
+                </>
+              )}
+              {ex.type === "rewrite" && (
+                <>
+                  <textarea
+                    placeholder="Code khởi đầu (starter)"
+                    value={ex.starter ?? ""}
+                    onChange={e => updatePracticeExercise(i, "starter", e.target.value)}
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono"
+                    rows={3}
+                  />
+                  <textarea
+                    placeholder="Code mẫu (solution)"
+                    value={ex.solution ?? ""}
+                    onChange={e => updatePracticeExercise(i, "solution", e.target.value)}
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm font-mono"
+                    rows={3}
+                  />
+                </>
+              )}
+              {ex.type === "reorder" && (
+                <div className="space-y-2">
+                  {ex.lines?.map((line, lineIdx) => (
+                    <div key={lineIdx} className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder={`Dòng ${lineIdx + 1}`}
+                        value={line}
+                        onChange={e => {
+                          const newLines = [...(ex.lines ?? [])];
+                          newLines[lineIdx] = e.target.value;
+                          updatePracticeExercise(i, "lines", newLines);
+                        }}
+                        className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm font-mono"
+                      />
+                      <button
+                        onClick={() => {
+                          const newLines = (ex.lines ?? []).filter((_, li) => li !== lineIdx);
+                          updatePracticeExercise(i, "lines", newLines);
+                        }}
+                        className="text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => updatePracticeExercise(i, "lines", [...(ex.lines ?? []), ""])}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    + Thêm dòng
+                  </button>
+                </div>
+              )}
+              <input
+                type="text"
+                placeholder="Hint (tùy chọn)"
+                value={ex.hint ?? ""}
+                onChange={e => updatePracticeExercise(i, "hint", e.target.value)}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+              />
+              <input
+                type="text"
+                placeholder="Giải thích (tùy chọn)"
+                value={ex.explanation ?? ""}
+                onChange={e => updatePracticeExercise(i, "explanation", e.target.value)}
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+        ))}
+        {practiceExercises.length === 0 && (
+          <p className="text-sm text-muted-foreground">Chưa có bài tập tương tác. Bấm nút trên để thêm.</p>
+        )}
+      </div>
     </div>
-  );
-                       }
+
+    {/* Delete modal */}
+    {deleteTarget && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+        <div className="mx-4 w-full max-w-sm rounded-xl border border-border bg-card p-6 text-center">
+          <AlertTriangle className="mx-auto h-8 w-8 text-destructive/70" />
+          <h3 className="mt-3 font-semibold">Xác nhận xoá</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {deleteTarget.type === "practice_exercise" ? "Xoá bài tập tương tác này?" : deleteTarget.type === "block" ? "Xoá đoạn code này?" : "Xoá bài tập này?"} Hành động không thể hoàn tác.
+          </p>
+          <div className="mt-4 flex justify-center gap-2">
+            <button onClick={() => setDeleteTarget(null)} className="rounded-md border border-border px-4 py-2 text-sm">Huỷ</button>
+            <button onClick={handleDelete} className="rounded-md bg-destructive px-4 py-2 text-sm text-destructive-foreground">Xoá</button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {!hasAnyKey() && (
+      <p className="mt-4 rounded-md border border-border bg-secondary/40 p-3 text-xs text-muted-foreground">
+        Chưa có API key. <Link to="/settings" className="text-primary hover:underline">Thêm key ở Cài đặt</Link> để dùng các tính năng AI.
+      </p>
+    )}
+  </div>
+);
+}
