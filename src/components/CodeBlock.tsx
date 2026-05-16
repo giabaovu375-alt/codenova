@@ -27,7 +27,7 @@ export function CodeBlock({
   }, [language]);
 
   return (
-    <div className="group flex w-full flex-col overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-sm transition-all hover:border-primary/40 hover:shadow-md">
+    <div className="group w-full overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-sm transition-all hover:border-primary/40 hover:shadow-md">
       {/* Title */}
       {title && (
         <div className="border-b border-border px-4 py-2 text-sm font-semibold text-foreground">
@@ -35,7 +35,7 @@ export function CodeBlock({
         </div>
       )}
 
-      {/* Code area (dark inside white card) */}
+      {/* Code on top */}
       <div className="relative">
         <div className="flex items-center justify-between border-b border-white/10 bg-[oklch(0.13_0_0)] px-3 py-1.5 text-xs font-medium text-[oklch(0.95_0_0)]">
           <span className="inline-flex items-center gap-1.5 text-white/70">
@@ -218,3 +218,4 @@ function ChallengeCard({
     </div>
   );
 }
+
