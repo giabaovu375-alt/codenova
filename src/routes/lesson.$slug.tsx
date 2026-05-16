@@ -1,4 +1,4 @@
-// lesson.$slug.tsx — Production-Ready Final (Fixed notFound + retry + Practice Mode toggle)
+// lesson.$slug.tsx — Production-Ready Final (Practice Mode with SQL data)
 import React, {
   useEffect,
   useMemo,
@@ -30,6 +30,8 @@ import { explainCode, gradeSubmission, hasAnyKey } from "@/lib/ai";
 import { progressStore } from "@/lib/progress-store";
 import { useAuth } from "@/lib/auth";
 import { PracticeMode } from "@/components/PracticeMode";
+import { getPracticeLesson } from "@/lib/practice-store";
+import type { PracticeLesson } from "@/components/practice/types"; // nếu có file types gốc
 
 export const Route = createFileRoute("/lesson/$slug")({
   component: LessonPage,
@@ -303,8 +305,9 @@ function LessonPage() {
   const [error, setError] = useState<string | null>(null);
   const [readSet, setReadSet] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<"lesson" | "practice">("lesson");
+  const [practiceLesson, setPracticeLesson] = useState<PracticeLesson | null>(null);
 
-  // Fetch bài học (chống memory leak)
+  // Fetch bài học + dữ liệu Practice (nếu có)
   const fetchLesson = useCallback(async () => {
     let cancelled = false;
     try {
@@ -312,28 +315,27 @@ function LessonPage() {
       setError(null);
 
       const data = await lessonsStore.getAsync(slug);
-
       if (!cancelled) {
-        if (!data) {
-          throw notFound();
-        }
+        if (!data) throw notFound();
         setLesson(data);
+
+        // Lấy Practice Lesson từ Supabase (qua store)
+        try {
+          const practice = await getPracticeLesson(slug);
+          if (!cancelled) setPracticeLesson(practice);
+        } catch {
+          if (!cancelled) setPracticeLesson(null);
+        }
       }
     } catch (err: any) {
       if (!cancelled) {
-        if (err?.isNotFound || err?.status === 404) {
-          throw err;
-        }
+        if (err?.isNotFound || err?.status === 404) throw err;
         setError(err.message || "Không thể tải bài học.");
       }
     } finally {
-      if (!cancelled) {
-        setLoading(false);
-      }
+      if (!cancelled) setLoading(false);
     }
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [slug]);
 
   useEffect(() => {
@@ -344,16 +346,12 @@ function LessonPage() {
   useEffect(() => {
     if (!user || !lesson) return;
     let cancelled = false;
-
     progressStore.get(slug).then((p) => {
       if (cancelled || !p) return;
       const ids = lesson.blocks.slice(0, p.blocks_read).map((b) => b.id);
       setReadSet(new Set(ids));
     });
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [user, lesson, slug]);
 
   // Lưu tiến độ (debounce 500ms)
@@ -367,11 +365,9 @@ function LessonPage() {
 
   useEffect(() => {
     if (!user || !lesson) return;
-
     const timer = setTimeout(() => {
       saveProgress(readSet.size, lesson.blocks.length);
     }, 500);
-
     return () => clearTimeout(timer);
   }, [readSet, user, lesson, saveProgress]);
 
@@ -424,6 +420,7 @@ function LessonPage() {
     totalBlocks > 0 ? Math.round((completedBlocks / totalBlocks) * 100) : 0;
   const language = lesson.language ?? "javascript";
   const langLabel = LANGUAGE_LABELS[language] || language.toUpperCase();
+  const hasPractice = practiceLesson !== null;
 
   return (
     <CodeNovaLayout>
@@ -444,31 +441,34 @@ function LessonPage() {
               {langLabel}
             </span>
           </div>
-          {/* Toggle giữa Bài học và Luyện tập */}
-          <div className="inline-flex rounded-md border border-border bg-background p-0.5">
-            <button
-              onClick={() => setViewMode("lesson")}
-              className={`inline-flex items-center gap-1.5 rounded px-3 py-1 text-xs font-medium transition-colors ${
-                viewMode === "lesson"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <BookOpen className="h-3.5 w-3.5" />
-              Bài học
-            </button>
-            <button
-              onClick={() => setViewMode("practice")}
-              className={`inline-flex items-center gap-1.5 rounded px-3 py-1 text-xs font-medium transition-colors ${
-                viewMode === "practice"
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Dumbbell className="h-3.5 w-3.5" />
-              Luyện tập
-            </button>
-          </div>
+
+          {/* Toggle Bài học / Luyện tập (chỉ hiện khi có Practice data) */}
+          {hasPractice && (
+            <div className="inline-flex rounded-md border border-border bg-background p-0.5">
+              <button
+                onClick={() => setViewMode("lesson")}
+                className={`inline-flex items-center gap-1.5 rounded px-3 py-1 text-xs font-medium transition-colors ${
+                  viewMode === "lesson"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <BookOpen className="h-3.5 w-3.5" />
+                Bài học
+              </button>
+              <button
+                onClick={() => setViewMode("practice")}
+                className={`inline-flex items-center gap-1.5 rounded px-3 py-1 text-xs font-medium transition-colors ${
+                  viewMode === "practice"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Dumbbell className="h-3.5 w-3.5" />
+                Luyện tập
+              </button>
+            </div>
+          )}
         </div>
 
         <h1 className="text-4xl font-bold tracking-tight">{lesson.title}</h1>
@@ -564,7 +564,7 @@ function LessonPage() {
           />
         </>
       ) : (
-        <PracticeMode lesson={lesson as any} />
+        <PracticeMode lesson={practiceLesson!} />
       )}
     </CodeNovaLayout>
   );
