@@ -1,6 +1,11 @@
 // src/routes/roadmap.tsx
 import React, { useState, useMemo } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { CodeNovaLayout } from "@/components/CodeNovaLayout";
+import {
+  Globe, Code, Zap, CheckCircle2, Lock, ArrowRight,
+  Search, Flame, Star, CalendarDays,
+} from "lucide-react";
 
 export const Route = createFileRoute("/roadmap")({
   head: () => ({
@@ -8,7 +13,7 @@ export const Route = createFileRoute("/roadmap")({
       { title: "Lộ trình học tập — CodeNova" },
       {
         name: "description",
-        content: "Khám phá các lộ trình học lập trình từ cơ bản đến nâng cao. Web, Python, JavaScript và nhiều hơn nữa.",
+        content: "Khám phá các lộ trình học lập trình từ cơ bản đến nâng cao.",
       },
     ],
   }),
@@ -29,7 +34,7 @@ interface Roadmap {
   id: string;
   title: string;
   description: string;
-  icon: string;
+  icon: React.ElementType; // thay vì emoji
   difficulty: string;
   estimatedTime: string;
   modules: Module[];
@@ -41,7 +46,7 @@ const ROADMAPS: Roadmap[] = [
     id: "web-dev",
     title: "Web Development",
     description: "Từ HTML cơ bản đến Fullstack Project",
-    icon: "🌐",
+    icon: Globe,
     difficulty: "Trung cấp",
     estimatedTime: "12 tuần",
     modules: [
@@ -60,7 +65,7 @@ const ROADMAPS: Roadmap[] = [
     id: "python",
     title: "Python Developer",
     description: "Từ cú pháp cơ bản đến AI/ML",
-    icon: "🐍",
+    icon: Code, // tạm dùng icon Code, sau có thể thay bằng ảnh
     difficulty: "Cơ bản",
     estimatedTime: "10 tuần",
     modules: [
@@ -75,7 +80,7 @@ const ROADMAPS: Roadmap[] = [
     id: "js-mastery",
     title: "JavaScript Mastery",
     description: "Nâng cao kỹ năng JavaScript hiện đại",
-    icon: "⚡",
+    icon: Zap,
     difficulty: "Nâng cao",
     estimatedTime: "8 tuần",
     modules: [
@@ -110,11 +115,11 @@ const getNextRecommendation = (modules: Module[]): Module | null => {
   return null;
 };
 
-// ─── Components ───────────────────────────────────────
+// ─── Reusable Components ──────────────────────────────
 const ProgressBar = ({ percent }: { percent: number }) => (
-  <div className="w-full bg-gray-700 rounded-full h-2 mt-1">
+  <div className="w-full bg-secondary rounded-full h-2 mt-1">
     <div
-      className="bg-indigo-500 h-2 rounded-full transition-all duration-700"
+      className="bg-primary h-2 rounded-full transition-all duration-700"
       style={{ width: `${percent}%` }}
     />
   </div>
@@ -130,28 +135,33 @@ const RoadmapCard = ({
   onClick: () => void;
 }) => {
   const { completed, total, percent } = calculateProgress(roadmap.modules);
+  const IconComponent = roadmap.icon;
   return (
     <div
       onClick={onClick}
       className={`cursor-pointer rounded-xl border p-4 transition hover:shadow-lg ${
-        isActive ? "border-indigo-500 bg-gray-800 shadow-md" : "border-gray-700 bg-gray-800/50 hover:border-gray-500"
+        isActive
+          ? "border-primary bg-card shadow-md"
+          : "border-border bg-card hover:border-primary/50"
       }`}
     >
       <div className="flex items-center gap-3">
-        <span className="text-2xl">{roadmap.icon}</span>
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <IconComponent className="h-5 w-5" />
+        </div>
         <div>
-          <h3 className="font-semibold text-white">{roadmap.title}</h3>
-          <p className="text-sm text-gray-400">{roadmap.description}</p>
+          <h3 className="font-semibold text-foreground">{roadmap.title}</h3>
+          <p className="text-sm text-muted-foreground">{roadmap.description}</p>
         </div>
       </div>
-      <div className="mt-3 flex items-center justify-between text-xs text-gray-400">
+      <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
         <span>{roadmap.difficulty}</span>
         <span>{roadmap.estimatedTime}</span>
       </div>
       <ProgressBar percent={percent} />
-      <div className="mt-2 flex justify-between text-xs text-gray-300">
+      <div className="mt-2 flex justify-between text-xs text-muted-foreground">
         <span>{completed}/{total} bài học</span>
-        <span>{percent}%</span>
+        <span className="font-medium text-primary">{percent}%</span>
       </div>
     </div>
   );
@@ -172,31 +182,35 @@ const ModuleTimeline = ({ modules }: { modules: Module[] }) => {
         const locked = isModuleLocked(mod, modules);
         const state = mod.completed ? "completed" : locked ? "locked" : "current";
         return (
-          <div key={mod.id} className="flex gap-4 pb-4 group">
+          <div key={mod.id} className="flex gap-4 pb-4">
+            {/* timeline dot & line */}
             <div className="flex flex-col items-center">
               <div
                 className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all duration-500 ${
                   state === "completed"
                     ? "bg-green-500 border-green-500"
                     : state === "current"
-                    ? "bg-indigo-500 border-indigo-500 animate-pulse shadow-[0_0_12px_rgba(99,102,241,0.6)]"
-                    : "bg-gray-600 border-gray-500"
+                    ? "bg-primary border-primary animate-pulse shadow-[0_0_12px_rgba(99,102,241,0.6)]"
+                    : "bg-secondary border-border"
                 }`}
               >
-                {state === "completed" && <span className="text-white text-xs">✓</span>}
+                {state === "completed" && <CheckCircle2 className="h-3 w-3 text-white" />}
               </div>
               {!isLast && (
-                <div className={`w-0.5 flex-1 mt-1 ${state === "completed" ? "bg-green-500" : "bg-gray-600"}`} />
+                <div className={`w-0.5 flex-1 mt-1 ${state === "completed" ? "bg-green-500" : "bg-border"}`} />
               )}
             </div>
-            <div className={`flex-1 transition-opacity ${locked ? "opacity-40" : ""}`}>
-              <h4 className="text-sm font-medium text-white">{mod.title}</h4>
-              <div className="flex justify-between text-xs text-gray-400">
+            {/* module info */}
+            <div className={`flex-1 ${locked ? "opacity-50" : ""}`}>
+              <h4 className="text-sm font-medium text-foreground">{mod.title}</h4>
+              <div className="flex justify-between text-xs text-muted-foreground">
                 <span>{mod.estimatedTime}</span>
                 <span>{mod.lessonCount} bài</span>
               </div>
               {locked && (
-                <p className="text-xs text-gray-500 italic mt-0.5">🔒 Cần hoàn thành trước</p>
+                <p className="text-xs text-muted-foreground italic mt-0.5 flex items-center gap-1">
+                  <Lock className="h-3 w-3" /> Cần hoàn thành trước
+                </p>
               )}
             </div>
           </div>
@@ -207,25 +221,24 @@ const ModuleTimeline = ({ modules }: { modules: Module[] }) => {
 };
 
 const NextRecommendation = ({ module, allModules }: { module: Module; allModules: Module[] }) => {
-  const fasterThanPercent = 72 + Math.floor(Math.random() * 15);
   return (
-    <div className="mt-6 rounded-lg border border-indigo-500/30 bg-indigo-500/10 p-4">
-      <h3 className="text-sm font-semibold text-indigo-300">✨ Đề xuất tiếp theo</h3>
+    <div className="mt-6 rounded-lg border border-primary/30 bg-primary/5 p-4">
+      <h3 className="text-sm font-semibold text-primary">✨ Đề xuất tiếp theo</h3>
       <div className="mt-2">
-        <h4 className="text-lg font-bold text-white">{module.title}</h4>
-        <p className="text-xs text-gray-300">Bạn đã sẵn sàng để tiếp tục</p>
-        <div className="mt-2 flex gap-4 text-xs text-gray-400">
+        <h4 className="text-lg font-bold text-foreground">{module.title}</h4>
+        <p className="text-xs text-muted-foreground">Bạn đã sẵn sàng để tiếp tục</p>
+        <div className="mt-2 flex gap-4 text-xs text-muted-foreground">
           <span>⏱ {module.estimatedTime}</span>
           <span>📚 {module.lessonCount} bài</span>
         </div>
         {module.prerequisites.length > 0 && (
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             Yêu cầu: {module.prerequisites.map(id => allModules.find(m => m.id === id)?.title).join(", ")}
           </p>
         )}
-        <p className="mt-2 text-xs text-green-400">🚀 Bạn đang đi nhanh hơn {fasterThanPercent}% người học</p>
-        <button className="mt-3 w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 transition">
+        <button className="mt-3 w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition">
           Bắt đầu học
+          <ArrowRight className="ml-2 inline h-4 w-4" />
         </button>
       </div>
     </div>
@@ -246,6 +259,7 @@ function RoadmapPage() {
     return ROADMAPS.filter(r => r.title.toLowerCase().includes(q) || r.description.toLowerCase().includes(q));
   }, [searchTerm]);
 
+  // Gamification mock (sẽ thay bằng data thật sau)
   const stats = useMemo(() => {
     let totalCompleted = 0;
     ROADMAPS.forEach((r) => {
@@ -270,46 +284,54 @@ function RoadmapPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-100 p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
+    <CodeNovaLayout>
+      <div className="mx-auto max-w-6xl px-4 pt-10 pb-20">
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between mb-8 gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-white">Lộ trình học tập</h1>
-            <p className="text-gray-400 text-sm mt-1">Chọn một lộ trình và tiếp tục hành trình của bạn</p>
+            <h1 className="text-4xl font-black tracking-tight">
+              Lộ trình học tập{" "}
+              <span className="bg-gradient-to-r from-primary to-fuchsia-400 bg-clip-text text-transparent">
+                chi tiết
+              </span>
+            </h1>
+            <p className="text-muted-foreground text-sm mt-1">Chọn một lộ trình và tiếp tục hành trình của bạn</p>
           </div>
           <div className="flex gap-4 flex-wrap">
-            <div className="flex items-center gap-1 rounded-full bg-gray-800 px-3 py-1 text-sm">
-              <span>🔥</span> {stats.streak} ngày
+            <div className="flex items-center gap-1 rounded-full border border-border bg-card px-3 py-1 text-sm">
+              <Flame className="h-4 w-4 text-orange-500" /> {stats.streak} ngày
             </div>
-            <div className="flex items-center gap-1 rounded-full bg-gray-800 px-3 py-1 text-sm">
-              <span>⭐</span> {stats.xp} XP
+            <div className="flex items-center gap-1 rounded-full border border-border bg-card px-3 py-1 text-sm">
+              <Star className="h-4 w-4 text-yellow-500" /> {stats.xp} XP
             </div>
-            <div className="flex items-center gap-1 rounded-full bg-gray-800 px-3 py-1 text-sm">
-              <span>📅</span> {stats.totalCompleted}/{stats.dailyGoal} hôm nay
+            <div className="flex items-center gap-1 rounded-full border border-border bg-card px-3 py-1 text-sm">
+              <CalendarDays className="h-4 w-4 text-primary" /> {stats.totalCompleted}/{stats.dailyGoal} hôm nay
             </div>
           </div>
         </div>
 
         {/* Search */}
         <div className="mb-6">
-          <input
-            type="text"
-            placeholder="🔍 Tìm kiếm lộ trình..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full md:w-80 rounded-lg bg-gray-800 border border-gray-700 px-4 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-indigo-500"
-          />
+          <div className="relative w-full md:w-80">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Tìm kiếm lộ trình..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="h-11 w-full rounded-xl border border-border bg-card pl-10 pr-4 text-sm outline-none transition-all focus:border-primary"
+            />
+          </div>
         </div>
 
         {/* Continue learning CTA */}
         {activeRoadmap && nextRecommendation && (
-          <div className="mb-6 p-4 rounded-xl border border-indigo-500/40 bg-indigo-500/5 flex items-center justify-between flex-wrap gap-4">
+          <div className="mb-6 p-4 rounded-xl border border-primary/30 bg-primary/5 flex items-center justify-between flex-wrap gap-4">
             <div>
-              <h3 className="font-semibold text-white">Tiếp tục học</h3>
-              <p className="text-sm text-gray-300">{nextRecommendation.title} – {activeRoadmap.title}</p>
+              <h3 className="font-semibold text-foreground">Tiếp tục học</h3>
+              <p className="text-sm text-muted-foreground">{nextRecommendation.title} – {activeRoadmap.title}</p>
             </div>
-            <button className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 transition">
+            <button className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition">
               Bắt đầu ngay
             </button>
           </div>
@@ -326,44 +348,48 @@ function RoadmapPage() {
             />
           ))}
           {filteredRoadmaps.length === 0 && (
-            <p className="text-gray-500 text-sm">Không tìm thấy lộ trình phù hợp.</p>
+            <p className="text-muted-foreground text-sm">Không tìm thấy lộ trình phù hợp.</p>
           )}
         </div>
 
         {/* Active roadmap detail */}
-        <div className="rounded-xl border border-gray-700 bg-gray-800/50 p-4 md:p-6">
+        <div className="rounded-xl border border-border bg-card/80 p-4 md:p-6 backdrop-blur">
           <div className="flex items-center gap-4 mb-6">
-            <span className="text-3xl">{activeRoadmap.icon}</span>
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <activeRoadmap.icon className="h-6 w-6" />
+            </div>
             <div>
-              <h2 className="text-2xl font-bold text-white">{activeRoadmap.title}</h2>
-              <p className="text-gray-400 text-sm">{activeRoadmap.description}</p>
+              <h2 className="text-2xl font-bold text-foreground">{activeRoadmap.title}</h2>
+              <p className="text-muted-foreground text-sm">{activeRoadmap.description}</p>
             </div>
           </div>
 
           <div className="grid md:grid-cols-3 gap-6">
+            {/* Timeline */}
             <div className="md:col-span-2">
-              <h3 className="text-lg font-semibold text-white mb-4">📋 Lộ trình chi tiết</h3>
+              <h3 className="text-lg font-semibold text-foreground mb-4">📋 Lộ trình chi tiết</h3>
               <ModuleTimeline modules={activeRoadmap.modules} />
             </div>
 
+            {/* Sidebar with recommendation & overview */}
             <div>
               {nextRecommendation && (
                 <NextRecommendation module={nextRecommendation} allModules={activeRoadmap.modules} />
               )}
-              <div className="mt-6 rounded-lg border border-gray-700 bg-gray-800/50 p-4">
-                <h3 className="text-sm font-semibold text-gray-300">📊 Tổng quan</h3>
+              <div className="mt-6 rounded-lg border border-border bg-card/80 p-4 backdrop-blur">
+                <h3 className="text-sm font-semibold text-foreground">📊 Tổng quan</h3>
                 <ProgressBar percent={calculateProgress(activeRoadmap.modules).percent} />
-                <div className="mt-2 flex justify-between text-xs text-gray-400">
+                <div className="mt-2 flex justify-between text-xs text-muted-foreground">
                   <span>{calculateProgress(activeRoadmap.modules).completed} hoàn thành</span>
                   <span>{calculateProgress(activeRoadmap.modules).total} tổng</span>
                 </div>
                 {recentActivity.length > 0 && (
                   <div className="mt-4">
-                    <h4 className="text-xs font-semibold text-gray-400 mb-2">Gần đây</h4>
+                    <h4 className="text-xs font-semibold text-muted-foreground mb-2">Gần đây</h4>
                     <ul className="space-y-1">
                       {recentActivity.map((act, i) => (
-                        <li key={i} className="text-xs text-gray-500 flex items-center gap-1">
-                          <span className="text-green-400">✓</span> {act.title} <span className="text-gray-600">({act.roadmap})</span>
+                        <li key={i} className="text-xs text-muted-foreground flex items-center gap-1">
+                          <CheckCircle2 className="h-3 w-3 text-green-500" /> {act.title} <span className="text-muted-foreground/50">({act.roadmap})</span>
                         </li>
                       ))}
                     </ul>
@@ -374,6 +400,6 @@ function RoadmapPage() {
           </div>
         </div>
       </div>
-    </div>
+    </CodeNovaLayout>
   );
 }
