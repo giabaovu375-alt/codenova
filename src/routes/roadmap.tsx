@@ -7,7 +7,12 @@ import {
   Search, Flame, Star, CalendarDays, Loader2, RefreshCw, AlertCircle,
 } from "lucide-react";
 import { lessonsStore, type Lesson } from "@/lib/lessons-store";
-import { progressStore, type LessonProgress, type ExerciseAttempt } from "@/lib/progress-store";
+import {
+  progressStore,
+  progressEvents,
+  type LessonProgress,
+  type ExerciseAttempt,
+} from "@/lib/progress-store";
 import { useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/roadmap")({
@@ -22,12 +27,12 @@ export const Route = createFileRoute("/roadmap")({
 
 // ─── Types ────────────────────────────────────────────
 interface Module {
-  id: string; // lesson slug
+  id: string;
   title: string;
   completed: boolean;
   locked: boolean;
-  estimatedTime: string; // tạm thời để "1 tuần" hoặc tính từ số blocks
-  lessonCount: number; // số blocks
+  estimatedTime: string;
+  lessonCount: number;
   level: string;
   slug: string;
 }
@@ -59,8 +64,8 @@ const buildRoadmaps = (lessons: Lesson[], progress: LessonProgress[]): Roadmap[]
       id: lesson.slug,
       title: lesson.title,
       completed,
-      locked: false, // sẽ tính sau
-      estimatedTime: "1 tuần", // có thể cải tiến sau
+      locked: false,
+      estimatedTime: "1 tuần",
       lessonCount: lesson.blocks.length,
       level: lesson.level,
       slug: lesson.slug,
@@ -81,19 +86,15 @@ const buildRoadmaps = (lessons: Lesson[], progress: LessonProgress[]): Roadmap[]
   const javaLessons = groupByLanguage("java");
 
   const pythonModules = pythonLessons.map(makeModule);
-  // Web: HTML + CSS + JS (có thể thêm React sau)
   const webModules = [
     ...htmlLessons.map(makeModule),
     ...cssLessons.map(makeModule),
     ...jsLessons.map(makeModule),
   ];
   const jsModules = jsLessons.map(makeModule);
-  // C++ modules
   const cppModules = cppLessons.map(makeModule);
-  // Java modules
   const javaModules = javaLessons.map(makeModule);
 
-  // Tính locked: module bị khóa nếu module trước đó chưa hoàn thành
   const applyLocking = (modules: Module[]) => {
     for (let i = 1; i < modules.length; i++) {
       if (!modules[i-1].completed) {
@@ -103,7 +104,6 @@ const buildRoadmaps = (lessons: Lesson[], progress: LessonProgress[]): Roadmap[]
     return modules;
   };
 
-  // Tạo roadmaps
   const roadmaps: Roadmap[] = [];
   if (pythonModules.length > 0) {
     roadmaps.push({
@@ -348,6 +348,16 @@ function RoadmapPage() {
 
   useEffect(() => {
     fetchData();
+
+    // Lắng nghe sự kiện realtime để tự động làm mới dữ liệu
+    const reload = () => {
+      fetchData();
+    };
+    window.addEventListener("progress-updated", reload);
+
+    return () => {
+      window.removeEventListener("progress-updated", reload);
+    };
   }, [fetchData]);
 
   const roadmaps = useMemo(() => buildRoadmaps(lessons, progress), [lessons, progress]);
@@ -380,13 +390,12 @@ function RoadmapPage() {
       streak,
       xp: totalXP,
       totalCompleted,
-      dailyGoal: 5, // tạm
+      dailyGoal: 5,
     };
   }, [attempts, progress]);
 
   const recentActivity = useMemo(() => {
     const completed = progress.filter(p => p.completed);
-    // Sắp xếp theo updated_at nếu có, không thì lấy 2 cái gần nhất
     return completed.slice(-2).reverse().map(p => ({
       title: lessons.find(l => l.slug === p.lesson_slug)?.title || p.lesson_slug,
       roadmap: lessons.find(l => l.slug === p.lesson_slug)?.language || "",
@@ -540,7 +549,7 @@ function RoadmapPage() {
                   </div>
                   {recentActivity.length > 0 && (
                     <div className="mt-4">
-                        <h4 className="text-xs font-semibold text-muted-foreground mb-2">Gần đây</h4>
+                      <h4 className="text-xs font-semibold text-muted-foreground mb-2">Gần đây</h4>
                       <ul className="space-y-1">
                         {recentActivity.map((act, i) => (
                           <li key={i} className="text-xs text-muted-foreground flex items-center gap-1">
@@ -559,3 +568,4 @@ function RoadmapPage() {
     </CodeNovaLayout>
   );
 }
+  
