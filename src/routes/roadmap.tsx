@@ -1,11 +1,26 @@
+// src/routes/roadmap.tsx
 import React, { useState, useMemo } from "react";
+import { createFileRoute } from "@tanstack/react-router";
+
+export const Route = createFileRoute("/roadmap")({
+  head: () => ({
+    meta: [
+      { title: "Lộ trình học tập — CodeNova" },
+      {
+        name: "description",
+        content: "Khám phá các lộ trình học lập trình từ cơ bản đến nâng cao. Web, Python, JavaScript và nhiều hơn nữa.",
+      },
+    ],
+  }),
+  component: RoadmapPage,
+});
 
 // ─── Types ────────────────────────────────────────────
 interface Module {
   id: string;
   title: string;
   completed: boolean;
-  prerequisites: string[]; // ID của module cần hoàn thành trước
+  prerequisites: string[];
   estimatedTime: string;
   lessonCount: number;
 }
@@ -20,7 +35,7 @@ interface Roadmap {
   modules: Module[];
 }
 
-// ─── Mock Data (đã thêm prerequisites để mở khóa động) ─
+// ─── Mock Data ────────────────────────────────────────
 const ROADMAPS: Roadmap[] = [
   {
     id: "web-dev",
@@ -143,7 +158,6 @@ const RoadmapCard = ({
 };
 
 const ModuleTimeline = ({ modules }: { modules: Module[] }) => {
-  // Xác định current (module đầu tiên không locked, chưa completed)
   const currentId = useMemo(() => {
     for (const mod of modules) {
       if (!mod.completed && !isModuleLocked(mod, modules)) return mod.id;
@@ -159,7 +173,6 @@ const ModuleTimeline = ({ modules }: { modules: Module[] }) => {
         const state = mod.completed ? "completed" : locked ? "locked" : "current";
         return (
           <div key={mod.id} className="flex gap-4 pb-4 group">
-            {/* timeline dot & line */}
             <div className="flex flex-col items-center">
               <div
                 className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all duration-500 ${
@@ -176,7 +189,6 @@ const ModuleTimeline = ({ modules }: { modules: Module[] }) => {
                 <div className={`w-0.5 flex-1 mt-1 ${state === "completed" ? "bg-green-500" : "bg-gray-600"}`} />
               )}
             </div>
-            {/* module info */}
             <div className={`flex-1 transition-opacity ${locked ? "opacity-40" : ""}`}>
               <h4 className="text-sm font-medium text-white">{mod.title}</h4>
               <div className="flex justify-between text-xs text-gray-400">
@@ -195,8 +207,7 @@ const ModuleTimeline = ({ modules }: { modules: Module[] }) => {
 };
 
 const NextRecommendation = ({ module, allModules }: { module: Module; allModules: Module[] }) => {
-  // Mock % người học đang đi chậm hơn
-  const fasterThanPercent = 72 + Math.floor(Math.random() * 15); // 72-86%
+  const fasterThanPercent = 72 + Math.floor(Math.random() * 15);
   return (
     <div className="mt-6 rounded-lg border border-indigo-500/30 bg-indigo-500/10 p-4">
       <h3 className="text-sm font-semibold text-indigo-300">✨ Đề xuất tiếp theo</h3>
@@ -222,21 +233,19 @@ const NextRecommendation = ({ module, allModules }: { module: Module; allModules
 };
 
 // ─── Main Page Component ─────────────────────────────
-const EnhancedRoadmapPage: React.FC = () => {
+function RoadmapPage() {
   const [activeRoadmapId, setActiveRoadmapId] = useState(ROADMAPS[0].id);
   const [searchTerm, setSearchTerm] = useState("");
 
   const activeRoadmap = useMemo(() => ROADMAPS.find((r) => r.id === activeRoadmapId)!, [activeRoadmapId]);
   const nextRecommendation = useMemo(() => getNextRecommendation(activeRoadmap.modules), [activeRoadmap]);
 
-  // Lọc roadmaps theo search
   const filteredRoadmaps = useMemo(() => {
     if (!searchTerm.trim()) return ROADMAPS;
     const q = searchTerm.toLowerCase();
     return ROADMAPS.filter(r => r.title.toLowerCase().includes(q) || r.description.toLowerCase().includes(q));
   }, [searchTerm]);
 
-  // Gamification mock
   const stats = useMemo(() => {
     let totalCompleted = 0;
     ROADMAPS.forEach((r) => {
@@ -250,7 +259,6 @@ const EnhancedRoadmapPage: React.FC = () => {
     };
   }, []);
 
-  // Recent activity (mock)
   const recentActivity = useMemo(() => {
     const completedModules: { title: string; roadmap: string }[] = [];
     ROADMAPS.forEach(r => {
@@ -258,7 +266,7 @@ const EnhancedRoadmapPage: React.FC = () => {
         if (m.completed) completedModules.push({ title: m.title, roadmap: r.title });
       });
     });
-    return completedModules.slice(-2).reverse(); // lấy 2 gần nhất
+    return completedModules.slice(-2).reverse();
   }, []);
 
   return (
@@ -294,7 +302,7 @@ const EnhancedRoadmapPage: React.FC = () => {
           />
         </div>
 
-        {/* Continue learning CTA (nếu có) */}
+        {/* Continue learning CTA */}
         {activeRoadmap && nextRecommendation && (
           <div className="mb-6 p-4 rounded-xl border border-indigo-500/40 bg-indigo-500/5 flex items-center justify-between flex-wrap gap-4">
             <div>
@@ -333,13 +341,11 @@ const EnhancedRoadmapPage: React.FC = () => {
           </div>
 
           <div className="grid md:grid-cols-3 gap-6">
-            {/* Timeline */}
             <div className="md:col-span-2">
               <h3 className="text-lg font-semibold text-white mb-4">📋 Lộ trình chi tiết</h3>
               <ModuleTimeline modules={activeRoadmap.modules} />
             </div>
 
-            {/* Sidebar with recommendation & overview */}
             <div>
               {nextRecommendation && (
                 <NextRecommendation module={nextRecommendation} allModules={activeRoadmap.modules} />
@@ -351,7 +357,6 @@ const EnhancedRoadmapPage: React.FC = () => {
                   <span>{calculateProgress(activeRoadmap.modules).completed} hoàn thành</span>
                   <span>{calculateProgress(activeRoadmap.modules).total} tổng</span>
                 </div>
-                {/* Recent activity */}
                 {recentActivity.length > 0 && (
                   <div className="mt-4">
                     <h4 className="text-xs font-semibold text-gray-400 mb-2">Gần đây</h4>
@@ -371,6 +376,4 @@ const EnhancedRoadmapPage: React.FC = () => {
       </div>
     </div>
   );
-};
-
-export default EnhancedRoadmapPage;
+}
