@@ -7,7 +7,7 @@ import type { Lesson, LessonWithProgress, LessonProgress } from '@/types/roadmap
 
 // ⚠️ Kiểm tra lại tên bảng progress trong Supabase của bạn
 // Nhìn trong screenshot thấy tên bảng tiếng Việt — thay đúng vào đây
-const PROGRESS_TABLE = 'tiến trình bài học'
+const PROGRESS_TABLE = 'lesson_progress'
 const LESSONS_TABLE  = 'lessons'
 
 
