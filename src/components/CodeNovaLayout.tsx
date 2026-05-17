@@ -70,7 +70,6 @@ export function CodeNovaLayout({ children }: { children: ReactNode }) {
           </Link>
           <nav className="flex items-center gap-5">
             <NavLink to="/">Trang chủ</NavLink>
-            <NavLink to="/roadmap">Lộ trình</NavLink>
             <NavLink to="/lessons">Bài học</NavLink>
             <NavLink to="/playground">AI sửa code</NavLink>
             {isAdmin && <NavLink to="/admin">Admin</NavLink>}
