@@ -1,4 +1,4 @@
-// lessons.tsx — Production Ready (Fixed type, deduplicated fetch, clean)
+//lessons.tsx — Production Ready (Fixed type, deduplicated fetch, clean)
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
