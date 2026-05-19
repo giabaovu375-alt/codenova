@@ -1,10 +1,23 @@
+// src/routes/lesson.$slug.tsx — Premium Stepper (Fixed Progress Saving)
 import React, {
-  useEffect, useMemo, useRef, useState, useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useCallback,
 } from "react";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import {
-  ArrowLeft, ArrowRight, Loader2, AlertCircle, RefreshCw,
-  Dumbbell, Flag, ChevronLeft, CheckCircle2, BookOpen,
+  ArrowLeft,
+  ArrowRight,
+  Loader2,
+  AlertCircle,
+  RefreshCw,
+  Dumbbell,
+  Flag,
+  ChevronLeft,
+  CheckCircle2,
+  BookOpen,
 } from "lucide-react";
 import { CodeNovaLayout } from "@/components/CodeNovaLayout";
 import { lessonsStore, type Lesson, LANGUAGE_LABELS } from "@/lib/lessons-store";
@@ -48,6 +61,8 @@ function LessonPage() {
   const [viewMode, setViewMode] = useState<"lesson" | "practice">("lesson");
   const [practiceLesson, setPracticeLesson] = useState<PracticeLesson | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
+  // Cờ đánh dấu đã hoàn thành, tránh ghi đè
+  const isCompletedRef = useRef(false);
 
   // ── Fetch Lesson + Practice ──────────────────────
   const fetchLesson = useCallback(async () => {
@@ -80,6 +95,7 @@ function LessonPage() {
     setStepIndex(0);
     setViewMode("lesson");
     setReadSet(new Set());
+    isCompletedRef.current = false;
   }, [slug]);
 
   // ── Load tiến độ từ Supabase ─────────────────────
@@ -90,33 +106,55 @@ function LessonPage() {
       if (cancelled || !p) return;
       const ids = lesson.blocks.slice(0, p.blocks_read).map((b) => b.id);
       setReadSet(new Set(ids));
+      // Nếu bài đã hoàn thành, bật cờ để tránh ghi đè sau này
+      if (p.completed) {
+        isCompletedRef.current = true;
+      }
     });
     return () => { cancelled = true; };
   }, [user, lesson, slug]);
 
-  // ── Lưu tiến độ (debounce 500ms) ─────────────────
-  useEffect(() => {
-    if (!user || !lesson) return;
-    const timer = setTimeout(() => {
-      progressStore.setBlocksRead(slug, readSet.size, lesson.blocks.length);
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [readSet, user, lesson, slug]);
+  // ── LƯU TIẾN ĐỘ CHỦ ĐỘNG (thay thế useEffect debounce) ─
+  const saveProgress = useCallback(
+    (size: number, total: number) => {
+      if (!user || !lesson) return;
+      // Nếu bài đã hoàn thành, không ghi đè nữa
+      if (isCompletedRef.current) return;
+      // Nếu đọc đủ, đánh dấu hoàn thành và đặt cờ
+      if (size >= total) {
+        isCompletedRef.current = true;
+      }
+      progressStore.setBlocksRead(slug, size, total);
+    },
+    [user, lesson, slug]
+  );
 
-  // ── Mark Read Helpers ────────────────────────────
-  const markRead = useCallback((id: string) => {
-    setReadSet((prev) => {
-      if (prev.has(id)) return prev;
-      const next = new Set(prev);
-      next.add(id);
-      return next;
-    });
-  }, []);
+  // Mark a block as read, and save progress immediately
+  const markRead = useCallback(
+    (id: string) => {
+      setReadSet((prev) => {
+        if (prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.add(id);
+        // Lưu tiến độ ngay khi đánh dấu
+        if (lesson) {
+          saveProgress(next.size, lesson.blocks.length);
+        }
+        return next;
+      });
+    },
+    [lesson, saveProgress]
+  );
 
   const markAllRead = useCallback(() => {
     if (!lesson) return;
-    lesson.blocks.forEach((b) => markRead(b.id));
-  }, [lesson, markRead]);
+    // Đánh dấu tất cả block đã đọc
+    const allIds = new Set(lesson.blocks.map((b) => b.id));
+    setReadSet(allIds);
+    // Lưu hoàn thành
+    isCompletedRef.current = true;
+    progressStore.setBlocksRead(slug, lesson.blocks.length, lesson.blocks.length);
+  }, [lesson, slug]);
 
   // ── Stepper Logic ────────────────────────────────
   const steps = useMemo<Step[]>(() => {
@@ -374,4 +412,4 @@ function LessonPage() {
       </nav>
     </CodeNovaLayout>
   );
-                                                       }
+}
