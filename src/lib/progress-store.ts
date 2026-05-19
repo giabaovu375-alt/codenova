@@ -1,6 +1,7 @@
 // src/lib/progress-store.ts — CodeNova Premium Progress System v3
 // Fixed: bỏ cache listMine() gây stale data, luôn fetch fresh từ Supabase
 // Added: invalidateCache() sau mỗi write, optimistic local state
+// Fixed setBlocksRead: no internal get() to avoid race condition, receives preserved best_score & completed_at
 
 import { supabase } from "@/integrations/supabase/client";
 
@@ -174,30 +175,28 @@ export const progressStore = {
     return (data as LessonProgress[]) ?? [];
   },
 
-  // ── Save blocks read progress ───────────────
+  // ── Save blocks read progress (FIXED: no internal get, receives preserved fields) ──
   async setBlocksRead(
     slug: string,
     blocks_read: number,
     total_blocks: number,
+    opts?: { preserveBestScore?: number; preserveCompletedAt?: string | null }
   ) {
     const id = await uid();
     if (!id) return;
 
-    const current = await this.get(slug);
     const completed = total_blocks > 0 && blocks_read >= total_blocks;
-    const completed_at =
-      completed && !current?.completed
-        ? new Date().toISOString()
-        : current?.completed_at ?? null;
 
     const payload = {
       user_id: id,
       lesson_slug: slug,
       blocks_read,
       total_blocks,
-      best_score: current?.best_score ?? 0,
+      best_score: opts?.preserveBestScore ?? 0,
       completed,
-      completed_at,
+      completed_at: completed
+        ? (opts?.preserveCompletedAt ?? new Date().toISOString())
+        : null,
       updated_at: new Date().toISOString(),
     };
 
