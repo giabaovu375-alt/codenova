@@ -1,4 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import React, {
+  useEffect, useMemo, useRef, useState, useCallback,
+} from "react";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import {
   ArrowLeft, ArrowRight, Loader2, AlertCircle, RefreshCw,
@@ -25,7 +27,17 @@ type Step =
   | { kind: "checkpoint"; chunkIndex: number; afterBlockIndex: number }
   | { kind: "final" };
 
-// ─── Main Page ───────────────────────────────────────
+// ─── Skeleton Loading ───────────────────────────────
+const SkeletonStep = () => (
+  <div className="animate-pulse space-y-6">
+    <div className="h-2 w-full rounded-full bg-secondary" />
+    <div className="h-8 w-1/3 rounded bg-secondary" />
+    <div className="h-64 w-full rounded-2xl bg-secondary" />
+    <div className="h-4 w-3/4 rounded bg-secondary" />
+  </div>
+);
+
+// ─── Main Lesson Page ───────────────────────────────
 function LessonPage() {
   const { slug } = Route.useParams();
   const { user } = useAuth();
@@ -37,7 +49,7 @@ function LessonPage() {
   const [practiceLesson, setPracticeLesson] = useState<PracticeLesson | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
 
-  // Fetch bài học + practice
+  // ── Fetch Lesson + Practice ──────────────────────
   const fetchLesson = useCallback(async () => {
     let cancelled = false;
     try {
@@ -63,14 +75,14 @@ function LessonPage() {
 
   useEffect(() => { fetchLesson(); }, [fetchLesson]);
 
-  // Reset khi đổi bài
+  // ── Reset state khi đổi bài ──────────────────────
   useEffect(() => {
     setStepIndex(0);
     setViewMode("lesson");
     setReadSet(new Set());
   }, [slug]);
 
-  // Load tiến độ
+  // ── Load tiến độ từ Supabase ─────────────────────
   useEffect(() => {
     if (!user || !lesson) return;
     let cancelled = false;
@@ -82,18 +94,16 @@ function LessonPage() {
     return () => { cancelled = true; };
   }, [user, lesson, slug]);
 
-  // Lưu tiến độ (debounce)
-  const saveProgress = useCallback((size: number, total: number) => {
-    if (!user || !lesson || size === 0) return;
-    progressStore.setBlocksRead(slug, size, total);
-  }, [user, lesson, slug]);
-
+  // ── Lưu tiến độ (debounce 500ms) ─────────────────
   useEffect(() => {
     if (!user || !lesson) return;
-    const timer = setTimeout(() => saveProgress(readSet.size, lesson.blocks.length), 500);
+    const timer = setTimeout(() => {
+      progressStore.setBlocksRead(slug, readSet.size, lesson.blocks.length);
+    }, 500);
     return () => clearTimeout(timer);
-  }, [readSet, user, lesson, saveProgress]);
+  }, [readSet, user, lesson, slug]);
 
+  // ── Mark Read Helpers ────────────────────────────
   const markRead = useCallback((id: string) => {
     setReadSet((prev) => {
       if (prev.has(id)) return prev;
@@ -108,7 +118,7 @@ function LessonPage() {
     lesson.blocks.forEach((b) => markRead(b.id));
   }, [lesson, markRead]);
 
-  // Stepper logic
+  // ── Stepper Logic ────────────────────────────────
   const steps = useMemo<Step[]>(() => {
     if (!lesson) return [];
     const out: Step[] = [];
@@ -127,9 +137,12 @@ function LessonPage() {
     return out;
   }, [lesson]);
 
-  const totalChunks = useMemo(() => steps.filter((s) => s.kind === "checkpoint").length, [steps]);
+  const totalChunks = useMemo(
+    () => steps.filter((s) => s.kind === "checkpoint").length,
+    [steps]
+  );
 
-  // Keyboard navigation
+  // ── Keyboard Navigation ──────────────────────────
   useEffect(() => {
     if (viewMode !== "lesson") return;
     const onKey = (e: KeyboardEvent) => {
@@ -142,24 +155,21 @@ function LessonPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [steps.length, viewMode]);
 
-  // Scroll to top when step changes
+  // ── Scroll to top when step changes ──────────────
   useEffect(() => {
     if (viewMode === "lesson") window.scrollTo({ top: 0, behavior: "smooth" });
   }, [stepIndex, viewMode]);
 
-  // ── Render states ──
+  // ── Loading State ────────────────────────────────
   if (loading) {
     return (
       <CodeNovaLayout>
-        <div className="py-12 space-y-8 animate-pulse">
-          <div className="h-8 w-48 rounded bg-secondary" />
-          <div className="h-12 w-3/4 rounded bg-secondary" />
-          <div className="h-96 w-full rounded-lg bg-secondary" />
-        </div>
+        <div className="py-12"><SkeletonStep /></div>
       </CodeNovaLayout>
     );
   }
 
+  // ── Error State ──────────────────────────────────
   if (error) {
     return (
       <CodeNovaLayout>
@@ -176,6 +186,7 @@ function LessonPage() {
 
   if (!lesson) return null;
 
+  // ── Derived Data ─────────────────────────────────
   const totalBlocks = lesson.blocks.length;
   const completedBlocks = readSet.size;
   const progressPercent = totalBlocks > 0 ? Math.round((completedBlocks / totalBlocks) * 100) : 0;
@@ -189,7 +200,7 @@ function LessonPage() {
   const goNext = () => setStepIndex((i) => Math.min(i + 1, steps.length - 1));
   const openPractice = () => setViewMode("practice");
 
-  // Nếu đang ở chế độ practice
+  // ── Practice Mode View ───────────────────────────
   if (viewMode === "practice" && hasPractice) {
     return (
       <CodeNovaLayout>
@@ -206,12 +217,13 @@ function LessonPage() {
     );
   }
 
+  // ── Main Lesson View ─────────────────────────────
   return (
     <CodeNovaLayout>
-      {/* Sticky header */}
-      <div className="sticky top-0 z-20 -mx-4 mb-6 border-b border-border/70 bg-background/80 px-4 py-3 backdrop-blur">
+      {/* Sticky header with progress */}
+      <div className="sticky top-0 z-20 -mx-4 mb-6 border-b border-border/70 bg-background/80 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="flex items-center justify-between gap-3">
-          <Link to="/lessons" className="inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground">
+          <Link to="/lessons" className="inline-flex items-center gap-2 text-xs text-muted-foreground transition-colors hover:text-foreground">
             <ArrowLeft className="h-3.5 w-3.5" /> Tất cả bài học
           </Link>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -362,4 +374,4 @@ function LessonPage() {
       </nav>
     </CodeNovaLayout>
   );
-      }
+                                                       }
