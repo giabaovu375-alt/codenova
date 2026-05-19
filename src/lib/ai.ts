@@ -1,4 +1,4 @@
-// ai.ts — Ultimate Multi-AI Provider Hub (Clean & Fixed)
+// ai.ts — Ultimate Multi-AI Provider Hub (Premium & Stable)
 export type ProviderId =
   | "openai"
   | "deepseek"
@@ -67,19 +67,14 @@ export const PROVIDERS: ProviderInfo[] = [
   },
   {
     id: "groq",
-name: "Groq (Llama 3.3 70B, Mixtral)",
-description: "Cực nhanh, miễn phí. Tốt cho code cơ bản.",
-signupUrl: "https://console.groq.com/keys",
-models: [
-  "llama-3.3-70b-versatile",
-  "llama-3.1-8b-instant",
-  "mixtral-8x7b-32768"
-],
-defaultModel: "llama-3.3-70b-versatile",
-tier: "fast",
-apiFormat: "openai",
-
-baseUrl: "https://api.groq.com/openai/v1",
+    name: "Groq (Llama 3.3 70B, Mixtral)",
+    description: "Cực nhanh, miễn phí. Tốt cho code cơ bản.",
+    signupUrl: "https://console.groq.com/keys",
+    models: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"],
+    defaultModel: "llama-3.3-70b-versatile",
+    tier: "fast",
+    apiFormat: "openai",
+    baseUrl: "https://api.groq.com/openai/v1",
   },
   {
     id: "openrouter",
@@ -192,17 +187,15 @@ export function suggestModelForLanguage(provider: ProviderId, language: string):
 type Msg = { role: "system" | "user" | "assistant"; content: string };
 
 // ============================================================
-// Response cache: tránh gọi lại API cho cùng prompt
-// (giảm chi phí, tăng tốc, tránh bị provider gắn cờ lạm dụng)
+// Response cache
 // ============================================================
 const CACHE_PREFIX = "codenova:aicache:v1:";
 const CACHE_INDEX_KEY = "codenova:aicache:v1:__index";
-const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 ngày
+const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 const CACHE_MAX_ENTRIES = 200;
 const memCache = new Map<string, { value: string; ts: number }>();
 
 function hashKey(input: string): string {
-  // FNV-1a 32-bit -> base36, đủ ngắn & ổn định cho cache key
   let h = 0x811c9dc5;
   for (let i = 0; i < input.length; i++) {
     h ^= input.charCodeAt(i);
@@ -265,7 +258,6 @@ function cacheSet(key: string, value: string) {
     }
     writeIndex(idx);
   } catch {
-    // localStorage đầy: dọn bớt
     try {
       const idx = readIndex();
       for (let i = 0; i < 20 && idx.length > 0; i++) {
@@ -313,9 +305,7 @@ async function readError(res: Response, label: string): Promise<never> {
 }
 
 // ============================================================
-// OpenAI-compatible Chat Completions
-// Dùng cho: OpenAI, DeepSeek, Groq, OpenRouter, Mistral, Together, Cerebras
-// Docs: https://platform.openai.com/docs/api-reference/chat/create
+// API Call Implementations
 // ============================================================
 async function callOpenAICompatible(
   key: string,
@@ -332,45 +322,27 @@ async function callOpenAICompatible(
     Authorization: `Bearer ${key}`,
     ...extraHeaders,
   };
-  const body: Record<string, unknown> = {
+  const body = {
     model,
     messages: messages.map((m) => ({ role: m.role, content: m.content })),
     temperature: 0.3,
     max_tokens: 4096,
     stream: false,
   };
-  const res = await safeFetch(
-    url,
-    { method: "POST", headers, body: JSON.stringify(body) },
-    label
-  );
+  const res = await safeFetch(url, { method: "POST", headers, body: JSON.stringify(body) }, label);
   if (!res.ok) await readError(res, label);
   const data = await res.json();
-  // Chuẩn OpenAI: choices[0].message.content
-  return (
-    data?.choices?.[0]?.message?.content ??
-    data?.choices?.[0]?.delta?.content ??
-    ""
-  );
+  return data?.choices?.[0]?.message?.content ?? "";
 }
 
-// ============================================================
-// Anthropic Messages API
-// Docs: https://docs.anthropic.com/en/api/messages
-// ============================================================
 async function callAnthropic(key: string, model: string, messages: Msg[]): Promise<string> {
-  const sys = messages
-    .filter((m) => m.role === "system")
-    .map((m) => m.content)
-    .join("\n");
-  // Anthropic chỉ chấp nhận role "user" | "assistant", và messages phải xen kẽ
+  const sys = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n");
   const convo = messages
     .filter((m) => m.role !== "system")
     .map((m) => ({
       role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
       content: [{ type: "text" as const, text: m.content }],
     }));
-
   const res = await safeFetch(
     "https://api.anthropic.com/v1/messages",
     {
@@ -380,7 +352,6 @@ async function callAnthropic(key: string, model: string, messages: Msg[]): Promi
         Accept: "application/json",
         "x-api-key": key,
         "anthropic-version": "2023-06-01",
-        // Cho phép gọi trực tiếp từ trình duyệt (CORS)
         "anthropic-dangerous-direct-browser-access": "true",
       },
       body: JSON.stringify({
@@ -395,71 +366,39 @@ async function callAnthropic(key: string, model: string, messages: Msg[]): Promi
   );
   if (!res.ok) await readError(res, "Claude");
   const data = await res.json();
-  // Chuẩn Anthropic: content là mảng các block, lấy text từ block type "text"
   const blocks: Array<{ type: string; text?: string }> = data?.content ?? [];
-  return blocks
-    .filter((b) => b.type === "text" && typeof b.text === "string")
-    .map((b) => b.text as string)
-    .join("");
+  return blocks.filter((b) => b.type === "text" && typeof b.text === "string").map((b) => b.text as string).join("");
 }
 
-// ============================================================
-// Google Gemini — generateContent
-// Docs: https://ai.google.dev/api/generate-content
-// Dùng header x-goog-api-key (khuyến nghị) thay cho ?key= query param
-// ============================================================
 async function callGeminiAPI(key: string, model: string, messages: Msg[]): Promise<string> {
-  const sys = messages
-    .filter((m) => m.role === "system")
-    .map((m) => m.content)
-    .join("\n");
+  const sys = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n");
   const contents = messages
     .filter((m) => m.role !== "system")
     .map((m) => ({
       role: m.role === "assistant" ? "model" : "user",
       parts: [{ text: m.content }],
     }));
-
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
   const body: Record<string, unknown> = {
     contents,
-    generationConfig: {
-      temperature: 0.3,
-      maxOutputTokens: 4096,
-      topP: 0.95,
-    },
+    generationConfig: { temperature: 0.3, maxOutputTokens: 4096, topP: 0.95 },
   };
-  if (sys) {
-    body.systemInstruction = { role: "system", parts: [{ text: sys }] };
-  }
-
+  if (sys) body.systemInstruction = { role: "system", parts: [{ text: sys }] };
   const res = await safeFetch(
     url,
     {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        "x-goog-api-key": key,
-      },
+      headers: { "Content-Type": "application/json", Accept: "application/json", "x-goog-api-key": key },
       body: JSON.stringify(body),
     },
     "Gemini"
   );
   if (!res.ok) await readError(res, "Gemini");
   const data = await res.json();
-  // Chuẩn Gemini: candidates[0].content.parts[].text
-  const parts: Array<{ text?: string }> =
-    data?.candidates?.[0]?.content?.parts ?? [];
+  const parts: Array<{ text?: string }> = data?.candidates?.[0]?.content?.parts ?? [];
   return parts.map((p) => p.text ?? "").join("");
 }
 
-// ============================================================
-// Hugging Face — Inference Providers (Chat Completions, OpenAI-compatible)
-// Docs: https://huggingface.co/docs/inference-providers/tasks/chat-completion
-// Endpoint mới: https://router.huggingface.co/v1/chat/completions
-// (endpoint cũ /models/{id} đã deprecated cho chat models)
-// ============================================================
 async function callHuggingFaceAPI(key: string, model: string, messages: Msg[]): Promise<string> {
   const res = await safeFetch(
     "https://router.huggingface.co/v1/chat/completions",
@@ -480,7 +419,6 @@ async function callHuggingFaceAPI(key: string, model: string, messages: Msg[]): 
     },
     "Hugging Face"
   );
-
   if (!res.ok) {
     const errorData = await res.clone().json().catch(() => null);
     if (errorData?.error) {
@@ -489,7 +427,6 @@ async function callHuggingFaceAPI(key: string, model: string, messages: Msg[]): 
     }
     await readError(res, "Hugging Face");
   }
-
   const data = await res.json();
   if (data?.error) {
     const msg = typeof data.error === "string" ? data.error : JSON.stringify(data.error);
@@ -509,22 +446,15 @@ export async function chat(
   const key = getApiKey(provider);
   if (!key) throw new Error(`Chưa có API key cho ${info.name}. Vào Cài đặt để thêm.`);
   const model = modelOverride || getSelectedModel(provider) || info.defaultModel;
-
   const cacheKey = makeCacheKey(provider, model, messages);
   if (!options?.noCache) {
     const cached = cacheGet(cacheKey);
     if (cached !== null) return cached;
   }
-
   let result: string;
   switch (info.apiFormat) {
     case "openai":
-      result = await callOpenAICompatible(
-        key,
-        model,
-        messages,
-        info.baseUrl || "https://api.openai.com/v1",
-        info.name,
+      result = await callOpenAICompatible(key, model, messages, info.baseUrl || "https://api.openai.com/v1", info.name,
         provider === "openrouter" ? {
           "HTTP-Referer": typeof window !== "undefined" ? window.location.origin : "",
           "X-Title": "Code Nova",
@@ -543,47 +473,24 @@ export async function chat(
     default:
       throw new Error(`API format ${info.apiFormat} chưa được hỗ trợ.`);
   }
-
   if (!options?.noCache && result) cacheSet(cacheKey, result);
   return result;
 }
 
 export function pickProvider(prefer: "fast" | "smart"): ProviderId | null {
-  const smartOrder: ProviderId[] = [
-    "openai",
-    "claude",
-    "deepseek",
-    "openrouter",
-    "mistral",
-    "gemini",
-    "together",
-    "groq",
-    "cerebras",
-    "huggingface",
-  ];
-  const fastOrder: ProviderId[] = [
-    "groq",
-    "cerebras",
-    "gemini",
-    "deepseek",
-    "together",
-    "mistral",
-    "openrouter",
-    "openai",
-    "claude",
-    "huggingface",
-  ];
+  const smartOrder: ProviderId[] = ["openai", "claude", "deepseek", "openrouter", "mistral", "gemini", "together", "groq", "cerebras", "huggingface"];
+  const fastOrder: ProviderId[] = ["groq", "cerebras", "gemini", "deepseek", "together", "mistral", "openrouter", "openai", "claude", "huggingface"];
   const order = prefer === "smart" ? smartOrder : fastOrder;
   for (const id of order) if (getApiKey(id)) return id;
   return null;
 }
 
-// Hàm parse JSON an toàn từ AI response
+// ============================================================
+// Safe JSON Parser
+// ============================================================
 function safeJsonParse(text: string): any {
-  // Tìm JSON object/array đầu tiên hợp lệ
   const jsonMatch = text.match(/(\{[\s\S]*?\}|\[[\s\S]*?\])/);
   if (!jsonMatch) return null;
-  
   try {
     return JSON.parse(jsonMatch[0]);
   } catch {
@@ -591,109 +498,185 @@ function safeJsonParse(text: string): any {
   }
 }
 
-export async function explainCode(
-  code: string,
-  prefer: "fast" | "smart" = "fast",
-  language = "python"
-): Promise<string> {
+// ============================================================
+// Premium Functions
+// ============================================================
+
+export async function explainCode(code: string, prefer: "fast" | "smart" = "fast", language = "python"): Promise<string> {
   const p = pickProvider(prefer);
   if (!p) throw new Error("Chưa có API key nào. Vào /settings để thêm.");
   const model = suggestModelForLanguage(p, language);
-  return chat(
-    p,
-    [
-      {
-        role: "system",
-        content: `Bạn là trợ giảng lập trình tên Code Nova. Giải thích ngắn gọn, dễ hiểu bằng tiếng Việt. Dùng markdown. Không dài dòng. Ngôn ngữ đang dạy: ${language}.`,
-      },
-      {
-        role: "user",
-        content: `Giải thích đoạn code ${language} sau, chỉ ra các điểm quan trọng và cảnh báo lỗi nếu có:\n\n\`\`\`${language}\n${code}\n\`\`\``,
-      },
-    ],
-    model
-  );
+  return chat(p, [
+    {
+      role: "system",
+      content: `Bạn là trợ giảng lập trình tên Code Nova. Giải thích ngắn gọn, dễ hiểu bằng tiếng Việt. Dùng markdown. Không dài dòng. Ngôn ngữ đang dạy: ${language}.`,
+    },
+    { role: "user", content: `Giải thích đoạn code ${language} sau, chỉ ra các điểm quan trọng và cảnh báo lỗi nếu có:\n\n\`\`\`${language}\n${code}\n\`\`\`` },
+  ], model);
 }
 
-export async function fixCode(
-  code: string,
-  problem: string,
-  language = "python"
-): Promise<string> {
+export async function fixCode(code: string, problem: string, language = "python"): Promise<string> {
   const p = pickProvider("smart");
   if (!p) throw new Error("Chưa có API key nào. Vào /settings để thêm.");
   const model = suggestModelForLanguage(p, language);
-  return chat(
-    p,
-    [
-      {
-        role: "system",
-        content: `Bạn là chuyên gia debug ${language}. Trả về code đã sửa trong khối \`\`\`${language} kèm giải thích ngắn bằng tiếng Việt.`,
-      },
-      {
-        role: "user",
-        content: `Đoạn code:\n\`\`\`${language}\n${code}\n\`\`\`\n\nVấn đề: ${problem || "Tìm và sửa lỗi giúp tôi."}`,
-      },
-    ],
-    model
-  );
+  return chat(p, [
+    {
+      role: "system",
+      content: `Bạn là chuyên gia debug ${language}. Trả về code đã sửa trong khối \`\`\`${language} kèm giải thích ngắn bằng tiếng Việt.`,
+    },
+    { role: "user", content: `Đoạn code:\n\`\`\`${language}\n${code}\n\`\`\`\n\nVấn đề: ${problem || "Tìm và sửa lỗi giúp tôi."}` },
+  ], model);
 }
 
 export async function quickExplain(code: string, language = "python"): Promise<string> {
   const p = pickProvider("fast");
   if (!p) throw new Error("Chưa có API key.");
   return chat(p, [
-    {
-      role: "system",
-      content: `Bạn giải thích code ${language} CỰC ngắn gọn (1-3 dòng tiếng Việt). Không dùng markdown, không tiêu đề.`,
-    },
-    {
-      role: "user",
-      content: `Giải thích đoạn code này thật ngắn (1-3 dòng):\n\n\`\`\`${language}\n${code}\n\`\`\``,
-    },
+    { role: "system", content: `Bạn giải thích code ${language} CỰC ngắn gọn (1-3 dòng tiếng Việt). Không dùng markdown, không tiêu đề.` },
+    { role: "user", content: `Giải thích đoạn code này thật ngắn (1-3 dòng):\n\n\`\`\`${language}\n${code}\n\`\`\`` },
   ]);
 }
 
+// ============================================================
+// Premium Grade Submission with Robust Parsing
+// ============================================================
 export async function gradeSubmission(
   prompt: string,
   code: string,
   language = "python"
 ): Promise<{ score: number; feedback: string; optimized: string }> {
   const p = pickProvider("smart");
-  if (!p) throw new Error("Chưa có API key.");
+  if (!p) throw new Error("Chưa có API key nào. Vào /settings để thêm.");
+
   const text = await chat(p, [
     {
       role: "system",
-      content:
-        `Bạn là giám khảo ${language}. Chấm bài 0-10 dựa trên: đúng yêu cầu (5đ), chạy được không lỗi cú pháp (2đ), tối ưu/đẹp/đặt tên rõ (2đ), có comment hoặc cấu trúc tốt (1đ). ` +
-        `Chấm chặt: code rỗng/sai hoàn toàn = 0, code chạy nhưng thiếu yêu cầu = 3-5, code đúng cơ bản = 6-7, đúng và gọn = 8-9, xuất sắc = 10. ` +
-        `Trả về JSON THUẦN duy nhất với khoá: score (số 0-10), feedback (tiếng Việt, ngắn gọn, gạch đầu dòng các điểm tốt và cần sửa), optimized (code ${language} đã tối ưu, chỉ code, không kèm \`\`\`). Không thêm chữ nào ngoài JSON.`,
+      content: `Bạn là một trợ lý chấm bài lập trình. Hãy nhận xét và chấm điểm cho bài tập ${language} sau.
+      
+      Hãy trả lời bằng văn bản thuần túy, không dùng markdown.
+      Dòng đầu tiên của bạn PHẢI là điểm số, theo đúng định dạng: ĐIỂM: X/10 (ví dụ: ĐIỂM: 8/10).
+      Sau đó là phần nhận xét ngắn gọn bằng tiếng Việt.
+      Cuối cùng, nếu có thể, hãy đưa ra một phiên bản code đã được tối ưu.
+      
+      Các tiêu chí chấm điểm:
+      - Điểm tối đa là 10.
+      - Code phải chạy được và đúng yêu cầu (5 điểm).
+      - Code phải rõ ràng, có comment hoặc tên biến dễ hiểu (3 điểm).
+      - Code phải được tối ưu và không có lỗi (2 điểm).`,
     },
     {
       role: "user",
-      content: `Yêu cầu bài tập:\n${prompt}\n\nCode người học nộp:\n\`\`\`${language}\n${code}\n\`\`\``,
+      content: `Yêu cầu bài tập:\n${prompt}\n\nCode của học viên:\n\`\`\`${language}\n${code}\n\`\`\``,
+    },
+  ]);
+
+  // 1. Thử parse JSON trước
+  const jsonObj = safeJsonParse(text);
+  if (jsonObj && (typeof jsonObj.score === 'number' || typeof jsonObj.score === 'string')) {
+    const score = Math.max(0, Math.min(10, Math.round(Number(jsonObj.score) || 0)));
+    return {
+      score,
+      feedback: String(jsonObj.feedback ?? text).trim(),
+      optimized: String(jsonObj.optimized ?? "").trim(),
+    };
+  }
+
+  // 2. Regex tìm điểm theo format ĐIỂM: X/10
+  let score = 0;
+  let feedback = text;
+  let optimized = "";
+
+  const scoreLine = text.match(/điểm:\s*(\d+)\s*\/?\s*10/i);
+  if (scoreLine) {
+    score = Math.max(0, Math.min(10, parseInt(scoreLine[1], 10)));
+    feedback = text.replace(scoreLine[0], "").trim();
+  } else {
+    // 3. Regex tìm X/10
+    const scoreMatch = text.match(/(\d+)\s*\/\s*10/);
+    if (scoreMatch) {
+      score = Math.max(0, Math.min(10, parseInt(scoreMatch[1], 10)));
+      feedback = text.replace(scoreMatch[0], "").trim();
+    }
+  }
+
+  // 4. Tìm code tối ưu
+  const optRegex = /(?:bản tối ưu|optimized code|code tối ưu).*?:?\s*[\n\r]+(.*)/is;
+  const optMatch = text.match(optRegex);
+  if (optMatch) {
+    optimized = optMatch[1].trim();
+    feedback = feedback.replace(optMatch[0], "").trim();
+  }
+
+  if (!feedback) feedback = text;
+
+  return { score, feedback, optimized };
+}
+
+// ============================================================
+// Premium Lesson Content Generator
+// ============================================================
+export async function generateLessonContent(
+  topic: string,
+  language = "python"
+): Promise<{
+  title: string;
+  description: string;
+  blocks: { code: string; explanation: string }[];
+  exercises: { prompt: string }[];
+}> {
+  const p = pickProvider("smart");
+  if (!p) throw new Error("Chưa có API key nào.");
+  
+  const text = await chat(p, [
+    {
+      role: "system",
+      content: `Bạn là giảng viên lập trình. Tạo bài học ${language} ngắn gọn bằng tiếng Việt.
+      
+      QUAN TRỌNG: Bạn PHẢI trả lời bằng MỘT object JSON duy nhất, không được thêm bất kỳ văn bản nào khác.
+      Cấu trúc JSON như sau:
+      {
+        "title": "Tiêu đề bài học",
+        "description": "Mô tả ngắn 1-2 câu",
+        "blocks": [
+          { "code": "code ví dụ", "explanation": "giải thích 1-2 câu" }
+        ],
+        "exercises": [
+          { "prompt": "Đề bài tập" }
+        ]
+      }
+      Sinh 5-8 blocks code và 3 bài tập. Chỉ trả về JSON, không có text khác.`,
+    },
+    {
+      role: "user",
+      content: `Tạo bài học ${language} về chủ đề: ${topic}`,
     },
   ]);
   
+  // Thử parse JSON
   const obj = safeJsonParse(text);
-  if (!obj || (typeof obj.score !== "number" && typeof obj.score !== "string")) {
-    return { score: 0, feedback: text || "Không phân tích được phản hồi AI.", optimized: code };
+  if (obj && obj.title) {
+    return obj as any;
   }
   
-  try {
-    const score = Math.max(0, Math.min(10, Math.round(Number(obj.score) || 0)));
+  // Nếu AI không trả về JSON, thử tìm các phần trong text
+  const titleMatch = text.match(/title["\s:]+["']?([^"'\n]+)/i);
+  const descMatch = text.match(/description["\s:]+["']?([^"'\n]+)/i);
+  
+  if (titleMatch) {
     return {
-      score,
-      feedback: String(obj.feedback ?? "").trim(),
-      optimized: String(obj.optimized ?? "")
-        .replace(new RegExp("^```" + language + "\\n?|```$", "g"), "")
-        .trim(),
+      title: titleMatch[1].trim(),
+      description: descMatch?.[1]?.trim() || topic,
+      blocks: [{ code: "// code mẫu", explanation: "Đang cập nhật..." }],
+      exercises: [{ prompt: "Đang cập nhật..." }],
     };
-  } catch {
-    return { score: 0, feedback: text, optimized: code };
   }
+  
+  throw new Error("AI không trả về JSON hợp lệ và không thể parse nội dung.");
 }
 
+// ============================================================
+// Generate Exercises
+// ============================================================
 export async function generateExercises(
   topic: string,
   count = 3,
@@ -701,6 +684,7 @@ export async function generateExercises(
 ): Promise<string[]> {
   const p = pickProvider("fast");
   if (!p) throw new Error("Chưa có API key nào.");
+  
   const text = await chat(p, [
     {
       role: "system",
@@ -718,44 +702,3 @@ export async function generateExercises(
   }
   return [text];
 }
-
-export async function generateLessonContent(
-  topic: string,
-  language = "python"
-): Promise<{
-  title: string;
-  description: string;
-  blocks: { code: string; explanation: string }[];
-  exercises: { prompt: string }[];
-}> {
-  const p = pickProvider("smart");
-  if (!p) throw new Error("Chưa có API key nào.");
-  const text = await chat(p, [
-    {
-      role: "system",
-      content: `Bạn là giảng viên lập trình. Tạo bài học ${language} ngắn gọn bằng tiếng Việt. 
-Trả về JSON hợp lệ theo format:
-{
-  "title": "Tiêu đề bài học",
-  "description": "Mô tả ngắn 1-2 câu",
-  "blocks": [
-    { "code": "code ví dụ", "explanation": "giải thích 1-2 câu" }
-  ],
-  "exercises": [
-    { "prompt": "Đề bài tập" }
-  ]
-}
-Sinh 5-8 blocks code và 3 bài tập. Chỉ trả về JSON, không có text khác.`,
-    },
-    {
-      role: "user",
-      content: `Tạo bài học ${language} về chủ đề: ${topic}`,
-    },
-  ]);
-  
-  const obj = safeJsonParse(text);
-  if (!obj || !obj.title) {
-    throw new Error("AI không trả về JSON hợp lệ.");
-  }
-  return obj as any;
-  }
