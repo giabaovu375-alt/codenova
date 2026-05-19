@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { CodeNovaLayout } from "@/components/CodeNovaLayout";
 import { lessonsStore, type Lesson, LANGUAGE_LABELS } from "@/lib/lessons-store";
-import { progressStore } from "@/lib/progress-store";
+import { progressStore, type LessonProgress } from "@/lib/progress-store";
 import { useAuth } from "@/lib/auth";
 import { PracticeMode } from "@/components/PracticeMode";
 import { getPracticeLesson } from "@/lib/practice-store";
@@ -63,6 +63,8 @@ function LessonPage() {
   const [stepIndex, setStepIndex] = useState(0);
   // Cờ đánh dấu đã hoàn thành, tránh ghi đè
   const isCompletedRef = useRef(false);
+  // ✅ THÊM: Lưu dữ liệu progress gốc để preserve best_score và completed_at
+  const savedProgressRef = useRef<LessonProgress | null>(null);
 
   // ── Fetch Lesson + Practice ──────────────────────
   const fetchLesson = useCallback(async () => {
@@ -96,6 +98,7 @@ function LessonPage() {
     setViewMode("lesson");
     setReadSet(new Set());
     isCompletedRef.current = false;
+    savedProgressRef.current = null; // ✅ Reset ref khi đổi bài
   }, [slug]);
 
   // ── Load tiến độ từ Supabase ─────────────────────
@@ -104,6 +107,8 @@ function LessonPage() {
     let cancelled = false;
     progressStore.get(slug).then((p) => {
       if (cancelled || !p) return;
+      // ✅ LƯU vào ref để dùng sau khi save
+      savedProgressRef.current = p;
       const ids = lesson.blocks.slice(0, p.blocks_read).map((b) => b.id);
       setReadSet(new Set(ids));
       if (p.completed) {
@@ -113,15 +118,22 @@ function LessonPage() {
     return () => { cancelled = true; };
   }, [user, lesson, slug]);
 
-  // ── FIX: saveProgress — lưu trước, set cờ sau ───
+  // ── FIXED: saveProgress — truyền preserveBestScore và preserveCompletedAt ───
   const saveProgress = useCallback(
     (size: number, total: number) => {
       if (!user || !lesson) return;
       // Guard: nếu đã hoàn thành thì không ghi đè
       if (isCompletedRef.current) return;
 
-      // ✅ Lưu Supabase TRƯỚC
-      progressStore.setBlocksRead(slug, size, total);
+      // ✅ Lấy dữ liệu từ ref để preserve
+      const preservedScore = savedProgressRef.current?.best_score ?? 0;
+      const preservedCompletedAt = savedProgressRef.current?.completed_at ?? null;
+
+      // ✅ Gọi API mới với opts
+      progressStore.setBlocksRead(slug, size, total, {
+        preserveBestScore: preservedScore,
+        preserveCompletedAt: preservedCompletedAt,
+      });
 
       // ✅ Set cờ AFTER khi đủ điều kiện
       if (size >= total) {
@@ -145,24 +157,24 @@ function LessonPage() {
   );
 
   // ── FIX: useEffect theo dõi readSet để lưu progress ──
-  // Tách side-effect ra khỏi setState, đây là cách đúng của React
   useEffect(() => {
     if (!user || !lesson) return;
     if (readSet.size === 0) return; // Bỏ qua lần khởi tạo rỗng
     saveProgress(readSet.size, lesson.blocks.length);
   }, [readSet]); // ✅ Chỉ fire khi readSet thực sự thay đổi
-  // NOTE: Bỏ saveProgress, user, lesson khỏi deps array có chủ ý —
-  // để tránh re-save khi lesson load lại sau khi đã restore từ Supabase.
-  // saveProgress đã tự guard bằng isCompletedRef và check user/lesson bên trong.
 
   const markAllRead = useCallback(() => {
     if (!lesson) return;
     const allIds = new Set(lesson.blocks.map((b) => b.id));
     setReadSet(allIds);
-    // ✅ Lưu trực tiếp ở đây vì đây là action tường minh của user
-    // Không cần đi qua saveProgress vì ta biết chắc là hoàn thành
+    // ✅ Lưu trực tiếp ở đây, preserve dữ liệu từ ref
     if (!isCompletedRef.current) {
-      progressStore.setBlocksRead(slug, lesson.blocks.length, lesson.blocks.length);
+      const preservedScore = savedProgressRef.current?.best_score ?? 0;
+      const preservedCompletedAt = savedProgressRef.current?.completed_at ?? null;
+      progressStore.setBlocksRead(slug, lesson.blocks.length, lesson.blocks.length, {
+        preserveBestScore: preservedScore,
+        preserveCompletedAt: preservedCompletedAt,
+      });
       isCompletedRef.current = true;
     }
   }, [lesson, slug]);
