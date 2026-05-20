@@ -1,4 +1,3 @@
-// src/features/roadmap/module-timeline.tsx
 import React from "react";
 import { Link } from "@tanstack/react-router";
 import { CheckCircle2, Lock } from "lucide-react";
