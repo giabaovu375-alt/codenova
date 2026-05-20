@@ -1,4 +1,3 @@
-// src/features/roadmap/roadmap-types.ts
 import type { ElementType } from "react";
 
 export interface Module {
