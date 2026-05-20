@@ -1,4 +1,3 @@
-// src/features/roadmap/roadmap-header.tsx
 import React from "react";
 import { Search, Filter, ArrowUpDown } from "lucide-react";
 import type { SortMode, DifficultyFilter } from "./roadmap-types";
