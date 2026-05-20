@@ -1,4 +1,3 @@
-// src/features/roadmap/roadmap-sidebar.tsx
 import React from "react";
 import { Link } from "@tanstack/react-router";
 import {
@@ -9,14 +8,9 @@ import {
   Award,
   CalendarDays,
   CheckCircle2,
-  Target,
-  Flame,
-  Trophy,
-  Crown,
-  Rocket,
 } from "lucide-react";
-import { ProgressBar, CircularProgress } from "./ui-atoms";
-import { calculateProgress, getNextRecommendation, last7Days } from "./roadmap-utils";
+import { ProgressBar } from "./ui-atoms";
+import { calculateProgress, getNextRecommendation } from "./roadmap-utils";
 import type { Module, Roadmap } from "./roadmap-types";
 
 export const NextRecommendation = ({ module: mod, roadmapTitle }: { module: Module; roadmapTitle: string }) => (
@@ -42,32 +36,6 @@ export const NextRecommendation = ({ module: mod, roadmapTitle }: { module: Modu
     </Link>
   </div>
 );
-
-export const HeatmapWeek = ({ activeDates }: { activeDates: Set<string> }) => {
-  const days = last7Days();
-  return (
-    <div className="flex gap-1">
-      {days.map((d) => {
-        const active = activeDates.has(d);
-        const label = new Date(d).toLocaleDateString("vi-VN", {
-          weekday: "short",
-          day: "2-digit",
-        });
-        return (
-          <div
-            key={d}
-            title={label}
-            className={`h-7 flex-1 rounded ${
-              active
-                ? "bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-sm shadow-emerald-500/30"
-                : "bg-secondary"
-            }`}
-          />
-        );
-      })}
-    </div>
-  );
-};
 
 export const AchievementBadge = ({
   icon: Icon,
