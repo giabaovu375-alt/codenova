@@ -1,4 +1,3 @@
-// src/features/roadmap/ui-atoms.tsx
 import React, { useState, useCallback, useEffect } from "react";
 import { Sparkles } from "lucide-react";
 
