@@ -1,4 +1,3 @@
-// src/features/roadmap/roadmap-utils.ts
 import type { Lesson } from "@/lib/lessons-store";
 import type { LessonProgress, ExerciseAttempt } from "@/lib/progress-store";
 import type { Module, Roadmap } from "./roadmap-types";
@@ -109,15 +108,10 @@ export function buildRoadmaps(
     });
   };
 
-  // Python
   push("python", "Python Developer", "Từ cú pháp cơ bản đến OOP và AI/ML", null, "Cơ bản - Trung cấp", groupByLanguage("python").map(makeModule));
-  // Web Dev (HTML+CSS+JS)
   push("web-dev", "Web Development", "HTML, CSS, JavaScript nền tảng", null, "Cơ bản - Trung cấp", [...groupByLanguage("html"), ...groupByLanguage("css"), ...groupByLanguage("javascript")].map(makeModule));
-  // JS Mastery
   push("js-mastery", "JavaScript Mastery", "Nâng cao kỹ năng JavaScript hiện đại", null, "Trung cấp - Nâng cao", groupByLanguage("javascript").map(makeModule));
-  // C++
   push("cpp", "C++ Developer", "Lập trình hệ thống và game", null, "Cơ bản - Nâng cao", groupByLanguage("cpp").map(makeModule));
-  // Java
   push("java", "Java Developer", "Lập trình hướng đối tượng và ứng dụng", null, "Cơ bản - Trung cấp", groupByLanguage("java").map(makeModule));
 
   return roadmaps;
